@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoonCake Studio — 3D Mooncake Mold Designer | 月饼模具自定义生成器</title>
+<meta name="description" content="Browser-based 3D parametric mooncake mold designer with real-time preview, traditional Chinese patterns, AI pattern generation, and STL/GLB export for 3D printing.">
+<meta name="keywords" content="mooncake, mold, 3D, designer, three.js, 3D printing, STL, GLB, parametric, 月饼, 模具, 中秋">
+<meta name="author" content="MoonCake Studio">
+<meta property="og:title" content="MoonCake Studio — 3D Mooncake Mold Designer">
+<meta property="og:description" content="Design custom mooncake molds in the browser. 6 edge profiles, 6 traditional patterns, AI generation, text engraving, and 3D-print-ready export.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MoonCake Studio — 3D Mooncake Mold Designer">
+<meta name="twitter:description" content="Design custom mooncake molds in the browser with real-time 3D preview and export.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥮</text></svg>">
+<script src="https://cdn.staticfile.org/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#111113;--sidebar:#1C1C1E;--card:#2C2C2E;--border:#38383A;
+  --text:#F5F5F7;--text2:#98989D;--text3:#636366;
+  --accent:#FF9F0A;--blue:#0A84FF;--green:#30D158;--red:#FF453A;
+  --input:#1C1C1E;--radius:10px;--sw:380px;
+}
+html,body{height:100%;overflow:hidden}
+body{display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","Microsoft YaHei UI",sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+
+/* ── Top Bar ── */
+.topbar{height:48px;background:var(--sidebar);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:20}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--accent);white-space:nowrap}
+.logo i{font-size:16px}
+.view-tabs{display:flex;background:var(--card);border-radius:8px;padding:2px;margin-left:auto}
+.view-tabs button{border:none;background:transparent;color:var(--text2);font-size:12px;padding:5px 14px;border-radius:6px;cursor:pointer;font-weight:600;transition:.15s}
+.view-tabs button.active{background:#48484A;color:var(--text)}
+.view-tabs button:hover:not(.active){color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.btn-icon{width:32px;height:32px;border:none;background:var(--card);color:var(--text2);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;font-size:13px}
+.btn-icon:hover{color:var(--text);background:#48484A}
+.btn-icon.active{color:var(--accent);background:rgba(255,159,10,.15)}
+.btn-export{border:none;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.15s;background:var(--card);color:var(--text2)}
+.btn-export:hover{background:#48484A;color:var(--text)}
+.btn-export.primary{background:var(--accent);color:#000}
+.btn-export.primary:hover{opacity:.9}
+
+/* ── Main Layout ── */
+.main{flex:1;display:flex;overflow:hidden}
+.sidebar{width:var(--sw);background:var(--sidebar);border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.sidebar::-webkit-scrollbar{width:6px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:#48484A;border-radius:3px}
+.viewport{flex:1;position:relative;background:radial-gradient(ellipse at 50% 40%,#2a2a2e 0%,#111113 70%)}
+#container{width:100%;height:100%}
+
+/* ── Section Accordion ── */
+.section{border-bottom:1px solid var(--border)}
+.section-header{padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;transition:.1s}
+.section-header:hover{background:rgba(255,255,255,.03)}
+.section-header .left{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.section-header .left i{color:var(--text3);width:16px;text-align:center;font-size:12px}
+.section-header .chevron{color:var(--text3);font-size:10px;transition:transform .2s}
+.section.collapsed .chevron{transform:rotate(-90deg)}
+.section-content{padding:2px 16px 16px;display:block}
+.section.collapsed .section-content{display:none}
+
+/* ── Form Elements ── */
+.sub-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 8px}
+.slider-row{margin-bottom:12px}
+.slider-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:6px}
+.slider-label .val{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:#48484A;border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:#fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;transition:.1s}
+input[type=range]::-webkit-slider-thumb:hover{background:var(--accent);transform:scale(1.1)}
+input[type=text],select{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;outline:none;font-size:13px;font-family:inherit;transition:.15s}
+input[type=text]:focus,select:focus{border-color:var(--accent)}
+select{cursor:pointer}
+
+/* ── Pattern Grid ── */
+.pattern-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.pattern-item{position:relative;border-radius:8px;border:2px solid transparent;cursor:pointer;overflow:hidden;transition:.15s;aspect-ratio:1}
+.pattern-item:hover{border-color:#58585A}
+.pattern-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.pattern-item canvas{width:100%;height:100%;display:block}
+.pattern-item .name{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.8));padding:4px 6px 3px;font-size:9px;color:#ccc;text-align:center;font-weight:600}
+
+/* ── Edge Grid ── */
+.edge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.edge-item{border-radius:8px;border:2px solid transparent;cursor:pointer;overflow:hidden;transition:.15s;aspect-ratio:1;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.edge-item:hover{border-color:#58585A}
+.edge-item.active{border-color:var(--accent)}
+.edge-item canvas{width:56px;height:56px}
+.edge-item .name{font-size:9px;color:var(--text2);font-weight:600}
+
+/* ── Color Grid ── */
+.color-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.color-swatch{width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s;position:relative}
+.color-swatch:hover{transform:scale(1.1)}
+.color-swatch.active{border-color:var(--text)}
+.color-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#000}
+
+/* ── Upload Area ── */
+.upload-area{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;transition:.15s;color:var(--text3);font-size:12px}
+.upload-area:hover{border-color:var(--accent);color:var(--text2);background:rgba(255,159,10,.03)}
+.upload-area i{font-size:20px;margin-bottom:6px;display:block}
+.upload-area.has-image{border-style:solid;border-color:var(--green);padding:4px}
+.upload-area.has-image img{width:100%;border-radius:6px;display:block}
+
+/* ── AI Button ── */
+.btn-ai{width:100%;border:none;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#5E5CE6,#BF5AF2);color:#fff;transition:.15s;margin-bottom:4px}
+.btn-ai:hover{opacity:.9;transform:translateY(-1px)}
+.btn-ai:active{transform:translateY(0)}
+
+/* ── Layout Buttons ── */
+.layout-row{display:flex;gap:6px;margin-bottom:10px}
+.layout-btn{flex:1;border:1px solid var(--border);background:var(--card);color:var(--text2);padding:6px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;transition:.15s}
+.layout-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(255,159,10,.08)}
+
+/* ── Analysis Grid ── */
+.analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.analysis-item{background:var(--card);border-radius:10px;padding:10px 12px;text-align:center}
+.analysis-item .val{font-size:16px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.analysis-item .label{font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.analysis-tip{display:flex;align-items:start;gap:8px;font-size:11px;color:var(--text2);line-height:1.5;padding:8px 10px;background:rgba(48,209,88,.06);border-radius:8px;border:1px solid rgba(48,209,88,.15)}
+.analysis-tip i{margin-top:2px;flex-shrink:0}
+
+/* ── Status Bar ── */
+.statusbar{height:30px;background:var(--sidebar);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:20px;font-size:11px;color:var(--text3);flex-shrink:0}
+.statusbar .dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px}
+
+/* ── Viewport Overlays ── */
+.dim-overlay{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);padding:10px 14px;border-radius:12px;font-size:11px;color:var(--text2);line-height:1.7;display:none;pointer-events:none;font-variant-numeric:tabular-nums;z-index:5}
+.dim-overlay.show{display:block}
+.dim-overlay .row{display:flex;justify-content:space-between;gap:24px}
+.dim-overlay .row .v{color:var(--accent);font-weight:600}
+.hint-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);padding:6px 16px;border-radius:20px;font-size:11px;color:var(--text3);white-space:nowrap;pointer-events:none;z-index:5}
+
+/* ── Responsive ── */
+@media(max-width:860px){
+  .sidebar{width:100%;max-height:50vh;border-right:none;border-bottom:1px solid var(--border)}
+  .main{flex-direction:column}
+  .topbar{overflow-x:auto;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><i class="fas fa-moon"></i> MoonCake Studio</div>
+  <div class="view-tabs">
+    <button class="active" data-view="cake" onclick="setView('cake',this)">成品预览</button>
+    <button data-view="mold" onclick="setView('mold',this)">模具预览</button>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-icon" id="btnDim" onclick="toggleDim()" title="尺寸标注"><i class="fas fa-ruler-combined"></i></button>
+    <button class="btn-icon" id="btnWire" onclick="toggleWire()" title="线框模式"><i class="fas fa-border-all"></i></button>
+    <button class="btn-export" onclick="doExport('stl')"><i class="fas fa-download"></i> STL</button>
+    <button class="btn-export primary" onclick="doExport('glb')"><i class="fas fa-cube"></i> GLB</button>
+  </div>
+</div>
+
+<div class="main">
+  <aside class="sidebar" id="sidebar">
+
+    <!-- 模具外形 -->
+    <div class="section">
+      <div class="section-header" onclick="togSec(this)">
+        <span class="left"><i class="fas fa-shapes"></i> 模具外形</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </div>
+      <div class="section-content">
+        <div class="sub-label">边缘样式</div>
+        <div class="edge-grid" id="edgeGrid"></div>
+        <div class="slider-row"><div class="slider-label"><span>直径</span><span class="val" id="vD">8.5cm</span></div><input type="range" id="diameter" min="6" max="12" step=".1" value="8.5"></div>
+        <div class="slider-row"><div class="slider-label"><span>总高度</span><span class="val" id="vH">2.5cm</span></div><input type="range" id="bodyH" min="1.5" max="4" step=".1" value="2.5"></div>
+        <div class="slider-row"><div class="slider-label"><span>顶面弧度</span><span class="val" id="vDome">0.6</span></div><input type="range" id="domeH" min="0" max="1.5" step=".05" value="0.6"></div>
+        <div class="slider-row"><div class="slider-label"><span>花边深度</span><span class="val" id="vWD">0.5</span></div><input type="range" id="waveD" min="0" max="1.5" step=".05" value="0.5"></div>
+        <div class="slider-row"><div class="slider-label"><span>花边瓣数</span><span class="val" id="vWN">16</span></div><input type="range" id="waveN" min="0" max="32" step="1" value="16"></div>
+      </div>
+    </div>
+
+    <!-- 花纹图案 -->
+    <div class="section">
+      <div class="section-header" onclick="togSec(this)">
+        <span class="left"><i class="fas fa-palette"></i> 花纹图案</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </div>
+      <div class="section-content">
+        <div class="pattern-grid" id="patternGrid"></div>
+        <button class="btn-ai" onclick="aiGen()"><i class="fas fa-wand-magic-sparkles"></i> AI 随机生成图案</button>
+        <div class="sub-label">自定义图片 → 花纹</div>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileIn').click()">
+          <i class="fas fa-cloud-arrow-up"></i>
+          <span>拖拽或点击上传图片<br><small>自动转为浮雕花纹</small></span>
+        </div>
+        <input type="file" id="fileIn" accept="image/*" style="display:none">
+        <div class="slider-row" style="margin-top:10px"><div class="slider-label"><span>背景清除范围</span><span class="val" id="vMask">0.45</span></div><input type="range" id="maskS" min=".1" max=".8" step=".05" value="0.45"></div>
+      </div>
+    </div>
+
+    <!-- 文字刻印 -->
+    <div class="section">
+      <div class="section-header" onclick="togSec(this)">
+        <span class="left"><i class="fas fa-font"></i> 文字刻印</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </div>
+      <div class="section-content">
+        <div class="layout-row">
+          <button class="layout-btn active" id="lay2" onclick="setLayout(2)">两字 (左右)</button>
+          <button class="layout-btn" id="lay4" onclick="setLayout(4)">四字 (田字)</button>
+        </div>
+        <input type="text" id="mainText" value="中秋" maxlength="4" placeholder="输入刻字…" style="margin-bottom:10px">
+        <select id="fontSel" style="margin-bottom:10px">
+          <option value="STKaiti,KaiTi">华文楷体</option>
+          <option value="LiSu,SimLi,STLiti">隶书</option>
+          <option value="SimHei,Heiti SC">黑体</option>
+          <option value="serif">宋体</option>
+          <option value="STXingkai,Xingkai SC">行楷</option>
+        </select>
+        <div class="slider-row"><div class="slider-label"><span>文字大小</span><span class="val" id="vFS">.90</span></div><input type="range" id="fontS" min=".4" max="1.5" step=".05" value="0.9"></div>
+        <div class="slider-row"><div class="slider-label"><span>雕刻深度</span><span class="val" id="vED">0.35cm</span></div><input type="range" id="engD" min=".05" max=".8" step=".05" value="0.35"></div>
+      </div>
+    </div>
+
+    <!-- 外观配色 -->
+    <div class="section">
+      <div class="section-header" onclick="togSec(this)">
+        <span class="left"><i class="fas fa-swatchbook"></i> 外观配色</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </div>
+      <div class="section-content">
+        <div class="color-grid" id="colorGrid"></div>
+      </div>
+    </div>
+
+    <!-- 打印分析 -->
+    <div class="section">
+      <div class="section-header" onclick="togSec(this)">
+        <span class="left"><i class="fas fa-print"></i> 打印分析</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </div>
+      <div class="section-content">
+        <div class="analysis-grid">
+          <div class="analysis-item"><div class="val" id="aSize">85×85×31</div><div class="label">尺寸 mm</div></div>
+          <div class="analysis-item"><div class="val" id="aFaces">0</div><div class="label">三角面数</div></div>
+          <div class="analysis-item"><div class="val" id="aWeight">~18g</div><div class="label">PLA 重量</div></div>
+          <div class="analysis-item"><div class="val" id="aTime">~2h</div><div class="label">打印时间</div></div>
+        </div>
+        <div class="analysis-tip"><i class="fas fa-circle-check" style="color:var(--green)"></i><span>模型适配 FDM 3D 打印 · 推荐层高 0.15mm · 填充率 20%</span></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <div class="viewport" id="viewport">
+    <div id="container"></div>
+    <div class="dim-overlay" id="dimOv">
+      <div class="row"><span>直径</span><span class="v" id="dD">85.0 mm</span></div>
+      <div class="row"><span>总高</span><span class="v" id="dH">31.0 mm</span></div>
+      <div class="row"><span>壁厚</span><span class="v" id="dW">≥2 mm</span></div>
+    </div>
+    <div class="hint-bar">左键旋转 · 右键平移 · 滚轮缩放 · 双击重置</div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span><span class="dot"></span>就绪</span>
+  <span id="stInfo">操作提示：调整左侧参数，实时预览 3D 模型</span>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   Constants & State
+   ═══════════════════════════════════════════════════ */
+const CS = 2048;
+const EDGES = [
+  {id:'smooth', name:'光滑'},
+  {id:'scallop',name:'波浪'},
+  {id:'petal',  name:'花瓣'},
+  {id:'plum',   name:'梅花'},
+  {id:'chrysanth',name:'菊花'},
+  {id:'gear',   name:'锯齿'},
+];
+const PATTERNS = [
+  {id:'flower', name:'花卉纹'},
+  {id:'cloud',  name:'祥云纹'},
+  {id:'grain',  name:'五谷纹'},
+  {id:'branch', name:'缠枝纹'},
+  {id:'lattice',name:'窗棂纹'},
+  {id:'wave',   name:'海浪纹'},
+];
+const THEMES = {
+  classic:{base:'#e6a65c',pat:'#a0522d',name:'经典焦糖'},
+  gold:   {base:'#f0d060',pat:'#8B6508',name:'皇家金箔'},
+  matcha: {base:'#8bc34a',pat:'#33691e',name:'抹茶翠绿'},
+  purple: {base:'#dcd0ff',pat:'#7B2D8E',name:'紫薯芋泥'},
+  walnut: {base:'#8B6C42',pat:'#5C3317',name:'核桃原木'},
+  snow:   {base:'#e8f0f8',pat:'#7a9ab5',name:'冰皮浅蓝'},
+};
+
+let scene,camera,renderer,controls,gndMesh;
+let cakeGroup,moldGroup;
+let curView='cake', curEdge='scallop', curPat='flower', curTheme='classic', layoutN=2;
+let customImg=null; // user uploaded Image
+let wireMode=false;
+
+const g=(id)=>document.getElementById(id);
+const v=(id)=>parseFloat(g(id).value);
+
+/* ═══════════════════════════════════════════════════
+   Scene Setup
+   ═══════════════════════════════════════════════════ */
+function initScene(){
+  const c=g('container');
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x18181a);
+  scene.fog=new THREE.FogExp2(0x18181a,0.008);
+
+  camera=new THREE.PerspectiveCamera(32,c.clientWidth/c.clientHeight,0.1,300);
+  camera.position.set(18,14,18);
+
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(c.clientWidth,c.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.outputEncoding=THREE.sRGBEncoding;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.1;
+  c.appendChild(renderer.domElement);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,0.45));
+  const dir=new THREE.DirectionalLight(0xffffff,1.0);
+  dir.position.set(15,25,10);dir.castShadow=true;
+  dir.shadow.mapSize.set(2048,2048);
+  dir.shadow.camera.near=1;dir.shadow.camera.far=60;
+  dir.shadow.camera.left=-12;dir.shadow.camera.right=12;
+  dir.shadow.camera.top=12;dir.shadow.camera.bottom=-12;
+  scene.add(dir);
+  const rim=new THREE.DirectionalLight(0xffcc77,0.4);
+  rim.position.set(-10,8,-12);scene.add(rim);
+  const fill=new THREE.DirectionalLight(0x88aaff,0.25);
+  fill.position.set(-8,2,10);scene.add(fill);
+
+  // Ground (visible only in cake view)
+  gndMesh=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:0x1a1a1c,roughness:0.95}));
+  gndMesh.rotation.x=-Math.PI/2;gndMesh.position.y=-2;gndMesh.receiveShadow=true;
+  scene.add(gndMesh);
+
+  // Controls
+  controls=new THREE.OrbitControls(camera,renderer.domElement);
+  controls.target.set(0,1.5,0);
+  controls.enableDamping=true;controls.dampingFactor=0.08;
+  controls.minDistance=8;controls.maxDistance=60;
+  controls.maxPolarAngle=Math.PI*0.48;
+  controls.update();
+
+  // double-click reset
+  renderer.domElement.addEventListener('dblclick',()=>{
+    controls.target.set(0,1.5,0);camera.position.set(18,14,18);controls.update();
+  });
+
+  cakeGroup=new THREE.Group();moldGroup=new THREE.Group();
+  scene.add(cakeGroup,moldGroup);
+
+  window.addEventListener('resize',onResize);
+  onResize();
+}
+
+function onResize(){
+  const c=g('container');
+  camera.aspect=c.clientWidth/c.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(c.clientWidth,c.clientHeight);
+}
+
+function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}
+
+/* ═══════════════════════════════════════════════════
+   Edge Radius Function
+   ═══════════════════════════════════════════════════ */
+function edgeR(angle,n,d,style){
+  if(!d||!n||style==='smooth') return 0;
+  const a=angle*n;
+  switch(style){
+    case 'scallop': return Math.sin(a)*d;
+    case 'petal':   return Math.pow(Math.abs(Math.sin(a/2)),2)*d;
+    case 'plum':    return Math.pow(Math.cos(a*2.5/n+Math.PI*.25),4)*d*(n>=5?1:0);
+    case 'chrysanth':return(Math.sin(a)+.3*Math.sin(a*3))*.7*d;
+    case 'gear':    return Math.sign(Math.sin(a))*.7*d;
+    default: return Math.sin(a)*d;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   Pattern Canvas Generation (High Quality)
+   ═══════════════════════════════════════════════════ */
+function drawPatternOnCtx(ctx,type,R,color,size){
+  ctx.fillStyle=color;ctx.strokeStyle=color;
+  const cx=size/2,cy=size/2;
+  ctx.save();ctx.translate(cx,cy);
+  ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+
+  // outer decorative ring
+  ctx.lineWidth=R*.015;ctx.globalAlpha=.45;
+  ctx.beginPath();ctx.arc(0,0,R*.96,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.arc(0,0,R*.92,0,Math.PI*2);ctx.stroke();
+  // dot ring
+  for(let i=0;i<36;i++){
+    const a=Math.PI*2/36*i;
+    ctx.beginPath();ctx.arc(Math.cos(a)*R*.94,Math.sin(a)*R*.94,R*.008,0,Math.PI*2);ctx.fill();
+  }
+
+  if(type==='flower'){
+    // multi-layer lotus / peony
+    ctx.shadowBlur=8;ctx.shadowColor=color;
+    // outer ring petals
+    const outerN=12;
+    for(let i=0;i<outerN;i++){
+      const a=Math.PI*2/outerN*i;
+      ctx.save();ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0,R*.35);
+      ctx.bezierCurveTo(R*.18,R*.45,R*.22,R*.72,0,R*.85);
+      ctx.bezierCurveTo(-R*.22,R*.72,-R*.18,R*.45,0,R*.35);
+      ctx.closePath();
+      ctx.globalAlpha=.32;ctx.fill();
+      // petal vein
+      ctx.beginPath();ctx.moveTo(0,R*.38);ctx.lineTo(0,R*.78);
+      ctx.lineWidth=R*.006;ctx.globalAlpha=.2;ctx.stroke();
+      ctx.restore();
+    }
+    // mid ring
+    const midN=10;
+    for(let i=0;i<midN;i++){
+      const a=Math.PI*2/midN*i+Math.PI/midN;
+      ctx.save();ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0,R*.2);
+      ctx.bezierCurveTo(R*.15,R*.3,R*.18,R*.52,0,R*.62);
+      ctx.bezierCurveTo(-R*.18,R*.52,-R*.15,R*.3,0,R*.2);
+      ctx.closePath();
+      ctx.globalAlpha=.38;ctx.fill();
+      ctx.beginPath();ctx.moveTo(0,R*.23);ctx.lineTo(0,R*.56);
+      ctx.lineWidth=R*.005;ctx.globalAlpha=.18;ctx.stroke();
+      ctx.restore();
+    }
+    // inner ring
+    const inN=8;
+    for(let i=0;i<inN;i++){
+      const a=Math.PI*2/inN*i;
+      ctx.save();ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0,R*.1);
+      ctx.bezierCurveTo(R*.1,R*.18,R*.12,R*.32,0,R*.4);
+      ctx.bezierCurveTo(-R*.12,R*.32,-R*.1,R*.18,0,R*.1);
+      ctx.closePath();
+      ctx.globalAlpha=.42;ctx.fill();
+      ctx.restore();
+    }
+    // center pistil
+    ctx.beginPath();ctx.arc(0,0,R*.08,0,Math.PI*2);ctx.globalAlpha=.5;ctx.fill();
+    for(let i=0;i<8;i++){
+      const a=Math.PI*2/8*i;
+      ctx.beginPath();ctx.arc(Math.cos(a)*R*.05,Math.sin(a)*R*.05,R*.015,0,Math.PI*2);ctx.globalAlpha=.35;ctx.fill();
+    }
+
+  } else if(type==='cloud'){
+    // 如意祥云纹 — refined multi-layer ruyi cloud
+    ctx.shadowBlur=6;ctx.shadowColor=color;
+    function drawRuyi(cx2,cy2,r,rot){
+      ctx.save();ctx.translate(cx2,cy2);ctx.rotate(rot);
+      // double-lobe ruyi head
+      ctx.beginPath();
+      ctx.arc(-r*.35,0,r*.45,0,Math.PI*2);ctx.globalAlpha=.32;ctx.fill();
+      ctx.beginPath();
+      ctx.arc(r*.35,0,r*.45,0,Math.PI*2);ctx.globalAlpha=.32;ctx.fill();
+      // center overlap bead
+      ctx.beginPath();ctx.arc(0,-r*.1,r*.25,0,Math.PI*2);ctx.globalAlpha=.28;ctx.fill();
+      // curling tail
+      ctx.beginPath();ctx.lineWidth=R*.012;ctx.lineCap='round';
+      ctx.moveTo(0,r*.35);
+      ctx.bezierCurveTo(r*.2,r*.7,r*.1,r*1.1,0,r*1.3);
+      ctx.globalAlpha=.3;ctx.stroke();
+      ctx.restore();
+    }
+    // 8-fold radial outer ring
+    for(let i=0;i<8;i++){
+      const a=Math.PI*2/8*i;
+      drawRuyi(Math.cos(a)*R*.62,Math.sin(a)*R*.62,R*.16,a+Math.PI/2);
+    }
+    // inner 4-fold ring
+    for(let i=0;i<4;i++){
+      const a=Math.PI*2/4*i+Math.PI/4;
+      drawRuyi(Math.cos(a)*R*.3,Math.sin(a)*R*.3,R*.1,a+Math.PI/2);
+    }
+    // connecting arcs between outer clouds
+    ctx.lineWidth=R*.008;ctx.lineCap='round';
+    for(let i=0;i<8;i++){
+      const a1=Math.PI*2/8*i,a2=Math.PI*2/8*(i+1);
+      const m=(a1+a2)/2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a1)*R*.5,Math.sin(a1)*R*.5);
+      ctx.quadraticCurveTo(Math.cos(m)*R*.42,Math.sin(m)*R*.42,Math.cos(a2)*R*.5,Math.sin(a2)*R*.5);
+      ctx.globalAlpha=.2;ctx.stroke();
+    }
+    // center motif
+    ctx.beginPath();ctx.arc(0,0,R*.09,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
+
+  } else if(type==='grain'){
+    // 五谷丰登 — wheat ear with leaf-shaped grains, 6-arm spiral
+    ctx.shadowBlur=4;ctx.shadowColor=color;
+    const arms2=6;
+    for(let arm=0;arm<arms2;arm++){
+      const baseA=Math.PI*2/arms2*arm;
+      ctx.save();ctx.rotate(baseA);
+      // curved stalk
+      ctx.lineWidth=R*.014;ctx.lineCap='round';ctx.globalAlpha=.38;
+      ctx.beginPath();ctx.moveTo(0,R*.1);
+      ctx.bezierCurveTo(R*.08,R*.3,-R*.04,R*.55,R*.02,R*.82);
+      ctx.stroke();
+      // leaf-shaped grains on both sides
+      for(let j=0;j<9;j++){
+        const t=.12+j*.085;
+        const bt=t/.82;
+        const sx=R*(.08*3*bt*(1-bt)*(1-bt)+(-.04)*3*bt*bt*(1-bt)+.02*bt*bt*bt);
+        const gy=R*t;
+        for(let side=-1;side<=1;side+=2){
+          ctx.save();
+          ctx.translate(sx,gy);
+          ctx.rotate(side*0.5+(j%2?0.15:-0.15));
+          ctx.beginPath();
+          ctx.moveTo(0,0);
+          ctx.bezierCurveTo(side*R*.03,-R*.03,side*R*.045,-R*.06,0,-R*.075);
+          ctx.bezierCurveTo(-side*R*.015,-R*.05,-side*R*.01,-R*.02,0,0);
+          ctx.closePath();
+          ctx.globalAlpha=.35;ctx.fill();
+          ctx.restore();
+        }
+      }
+      ctx.restore();
+    }
+    // center seed cluster
+    for(let i=0;i<7;i++){
+      const a=i===0?0:Math.PI*2/6*i;
+      const rd=i===0?0:R*.05;
+      ctx.beginPath();ctx.arc(Math.cos(a)*rd,Math.sin(a)*rd,R*.022,0,Math.PI*2);
+      ctx.globalAlpha=.4;ctx.fill();
+    }
+
+  } else if(type==='branch'){
+    // 缠枝莲 — interlocking vine with small flowers
+    ctx.shadowBlur=5;ctx.shadowColor=color;
+    const sym2=6;
+    for(let s=0;s<sym2;s++){
+      ctx.save();ctx.rotate(Math.PI*2/sym2*s);
+      // S-curve vine
+      ctx.lineWidth=R*.016;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(0,R*.15);
+      ctx.bezierCurveTo(R*.25,R*.25,R*.1,R*.5,-R*.08,R*.68);
+      ctx.bezierCurveTo(-R*.15,R*.76,R*.02,R*.85,R*.08,R*.88);
+      ctx.globalAlpha=.35;ctx.stroke();
+      // small leaves along vine
+      const leafPts=[[R*.12,R*.23,.7],[R*.14,R*.38,-.5],[-R*.02,R*.55,.9],[-R*.1,R*.7,-.6],[R*.04,R*.84,.5]];
+      leafPts.forEach(([lx,ly,lr])=>{
+        ctx.save();ctx.translate(lx,ly);ctx.rotate(lr);
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.bezierCurveTo(R*.05,-R*.025,R*.06,-R*.08,0,-R*.11);
+        ctx.bezierCurveTo(-R*.06,-R*.08,-R*.05,-R*.025,0,0);
+        ctx.closePath();ctx.globalAlpha=.3;ctx.fill();
+        // leaf midrib
+        ctx.beginPath();ctx.moveTo(0,-R*.005);ctx.lineTo(0,-R*.09);
+        ctx.lineWidth=R*.003;ctx.globalAlpha=.2;ctx.stroke();
+        ctx.restore();
+      });
+      // small 5-petal flower at vine end
+      ctx.save();ctx.translate(R*.08,R*.88);
+      for(let p=0;p<5;p++){
+        ctx.save();ctx.rotate(Math.PI*2/5*p);
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.bezierCurveTo(R*.025,-R*.01,R*.03,-R*.04,0,-R*.055);
+        ctx.bezierCurveTo(-R*.03,-R*.04,-R*.025,-R*.01,0,0);
+        ctx.closePath();ctx.globalAlpha=.35;ctx.fill();
+        ctx.restore();
+      }
+      ctx.beginPath();ctx.arc(0,0,R*.015,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
+      ctx.restore();
+      ctx.restore();
+    }
+
+  } else if(type==='lattice'){
+    // 冰裂纹窗棂 — hexagonal ice-crack lattice
+    ctx.lineWidth=R*.018;ctx.lineCap='round';ctx.lineJoin='round';
+    // concentric hexagonal rings
+    for(let ring=0;ring<4;ring++){
+      const rr=R*(.2+ring*.2);
+      ctx.beginPath();
+      for(let i=0;i<=6;i++){
+        const a=Math.PI*2/6*i-Math.PI/6;
+        const x2=Math.cos(a)*rr,y2=Math.sin(a)*rr;
+        if(i===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
+      }
+      ctx.closePath();ctx.globalAlpha=.3;ctx.stroke();
+    }
+    // radial spokes
+    for(let i=0;i<12;i++){
+      const a=Math.PI*2/12*i;
+      ctx.beginPath();ctx.moveTo(Math.cos(a)*R*.15,Math.sin(a)*R*.15);
+      ctx.lineTo(Math.cos(a)*R*.88,Math.sin(a)*R*.88);
+      ctx.lineWidth=R*.008;ctx.globalAlpha=.2;ctx.stroke();
+    }
+    // ice-crack fills in cells
+    for(let ring=0;ring<3;ring++){
+      const rr=R*(.3+ring*.2);
+      for(let i=0;i<6;i++){
+        const a=Math.PI*2/6*i+(ring%2?Math.PI/6:0);
+        const cx2=Math.cos(a)*rr,cy2=Math.sin(a)*rr;
+        for(let k=0;k<3;k++){
+          const ca=Math.PI*2/3*k+ring;
+          const cl=R*.06;
+          ctx.beginPath();ctx.moveTo(cx2,cy2);
+          ctx.lineTo(cx2+Math.cos(ca)*cl,cy2+Math.sin(ca)*cl);
+          ctx.lineWidth=R*.006;ctx.globalAlpha=.18;ctx.stroke();
+        }
+      }
+    }
+    // center hexagonal ornament
+    ctx.lineWidth=R*.015;
+    ctx.beginPath();
+    for(let i=0;i<=6;i++){
+      const a=Math.PI*2/6*i;
+      const x2=Math.cos(a)*R*.12,y2=Math.sin(a)*R*.12;
+      if(i===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
+    }
+    ctx.closePath();ctx.globalAlpha=.4;ctx.fill();
+
+  } else if(type==='wave'){
+    // 海水江崖纹 — layered ocean waves with mountain base
+    ctx.lineCap='round';
+    // mountain base arcs (bottom)
+    ctx.lineWidth=R*.025;
+    for(let m=0;m<3;m++){
+      const my=R*.6+m*R*.12;
+      ctx.beginPath();
+      ctx.moveTo(-R*.8,my);
+      ctx.bezierCurveTo(-R*.4,my-R*.15,R*.4,my-R*.15,R*.8,my);
+      ctx.globalAlpha=.3;ctx.stroke();
+    }
+    // wave layers (concentric cresting arcs)
+    const wLayers=6;
+    for(let ly=0;ly<wLayers;ly++){
+      const baseY=-R*.1+ly*R*.16;
+      const wn=4+ly;
+      ctx.lineWidth=R*.015;
+      for(let w2=0;w2<wn;w2++){
+        const wx=-R*.85+w2*(R*1.7/wn)+(ly%2?R*.12:0);
+        const ww=R*.22;
+        // wave crest arc
+        ctx.beginPath();
+        ctx.arc(wx,baseY,ww,Math.PI,0,false);
+        ctx.globalAlpha=.28;ctx.stroke();
+        // curl at crest tip
+        ctx.beginPath();
+        ctx.arc(wx+ww,baseY,ww*.2,Math.PI,Math.PI*.5,true);
+        ctx.globalAlpha=.2;ctx.stroke();
+      }
+    }
+    // spray dots
+    for(let i=0;i<20;i++){
+      const dx=(Math.cos(i*2.4))*R*.6;
+      const dy=-R*.3+Math.abs(Math.sin(i*1.7))*R*.5;
+      ctx.beginPath();ctx.arc(dx,dy,R*.01,0,Math.PI*2);ctx.globalAlpha=.15;ctx.fill();
+    }
+  }
+
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function generateCanvas(isHeight){
+  const canvas=document.createElement('canvas');
+  canvas.width=CS;canvas.height=CS;
+  const ctx=canvas.getContext('2d');
+  const text=g('mainText').value;
+  const font=g('fontSel').value;
+  const fScale=v('fontS');
+  const mScale=v('maskS');
+  const theme=THEMES[curTheme];
+  const R=900;
+
+  // background
+  ctx.fillStyle=isHeight?'#000':theme.base;
+  ctx.fillRect(0,0,CS,CS);
+
+  const drawC=isHeight?'#fff':theme.pat;
+
+  // use custom image
+  if(customImg && curPat==='__custom'){
+    ctx.save();ctx.translate(CS/2,CS/2);
+    ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+    ctx.globalAlpha=isHeight?1:.8;
+    const s=R*2;
+    ctx.drawImage(customImg,-s/2,-s/2,s,s);
+    if(isHeight){
+      // re-draw as grayscale over
+      const id2=ctx.getImageData(CS/2-R,CS/2-R,R*2,R*2);
+      const d=id2.data;
+      for(let i=0;i<d.length;i+=4){
+        const gr=d[i]*.3+d[i+1]*.59+d[i+2]*.11;
+        d[i]=d[i+1]=d[i+2]=gr;
+      }
+      ctx.putImageData(id2,CS/2-R,CS/2-R);
+    }
+    ctx.restore();
+  } else if(curPat==='__ai'){
+    drawAIPattern(ctx,R,drawC,CS);
+  } else {
+    drawPatternOnCtx(ctx,curPat,R,drawC,CS);
+  }
+
+  // center mask for text
+  const maskR=R*mScale;
+  ctx.save();ctx.translate(CS/2,CS/2);
+  const grd=ctx.createRadialGradient(0,0,maskR*.4,0,0,maskR);
+  const mc=isHeight?'rgba(0,0,0,':'rgba('+hexToRGB(theme.base)+',';
+  grd.addColorStop(0,mc+'1)');grd.addColorStop(.6,mc+'1)');grd.addColorStop(1,mc+'0)');
+  ctx.fillStyle=grd;
+  ctx.beginPath();ctx.arc(0,0,maskR,0,Math.PI*2);ctx.fill();
+
+  // text — draw upright, matching UV: u=0.5+x/D, v=0.5-z/D
+  // Canvas x → world +x → UV +u (right), Canvas y → world +z → UV -v (down)
+  // So canvas (0,0) at center maps to UV (0.5, 0.5), canvas right=UV right, canvas down=UV up on model
+  // This means text drawn normally on canvas will appear correct on the model top face.
+  ctx.fillStyle=drawC;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowBlur=16;ctx.shadowColor=drawC;
+  const sz=300*fScale;
+  if(layoutN===2){
+    ctx.font=`bold ${sz}px ${font}`;
+    const gap=sz*.65;
+    const t=text.substring(0,2);
+    if(t[0]) ctx.fillText(t[0],-gap,0);
+    if(t[1]) ctx.fillText(t[1],gap,0);
+  } else {
+    ctx.font=`bold ${sz*.8}px ${font}`;
+    const gap=sz*.55;
+    const t=text.substring(0,4);
+    if(t[0]) ctx.fillText(t[0],-gap,-gap);
+    if(t[1]) ctx.fillText(t[1],gap,-gap);
+    if(t[2]) ctx.fillText(t[2],-gap,gap);
+    if(t[3]) ctx.fillText(t[3],gap,gap);
+  }
+
+  ctx.restore();
+  return canvas;
+}
+
+/* AI procedural pattern — Mandala / Lotus style */
+let aiSeed=0;
+function drawAIPattern(ctx,R,color,size){
+  ctx.save();ctx.translate(size/2,size/2);
+  ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+  ctx.fillStyle=color;ctx.strokeStyle=color;
+
+  const rng=mulberry32(aiSeed);
+  const sym=([6,8,10,12])[Math.floor(rng()*4)];
+  const style=Math.floor(rng()*3); // 0=mandala, 1=lotus, 2=geometric
+
+  // outer border ring
+  ctx.lineWidth=R*.015;ctx.globalAlpha=.45;
+  ctx.beginPath();ctx.arc(0,0,R*.95,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.arc(0,0,R*.91,0,Math.PI*2);ctx.stroke();
+  // border dots
+  for(let i=0;i<sym*3;i++){
+    const a=Math.PI*2/(sym*3)*i;
+    ctx.beginPath();ctx.arc(Math.cos(a)*R*.93,Math.sin(a)*R*.93,R*.008,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
+  }
+
+  if(style===0){
+    // Mandala: concentric petal rings
+    const rings=[{n:sym,rIn:.65,rOut:.88,w:.15},{n:sym*2,rIn:.35,rOut:.6,w:.1},{n:sym,rIn:.12,rOut:.32,w:.08}];
+    rings.forEach(ring=>{
+      for(let i=0;i<ring.n;i++){
+        const a=Math.PI*2/ring.n*i;
+        ctx.save();ctx.rotate(a);
+        // petal
+        ctx.beginPath();
+        const ri=R*ring.rIn,ro=R*ring.rOut,w=R*ring.w;
+        ctx.moveTo(0,ri);
+        ctx.bezierCurveTo(w,ri+(ro-ri)*.3,w,ri+(ro-ri)*.7,0,ro);
+        ctx.bezierCurveTo(-w,ri+(ro-ri)*.7,-w,ri+(ro-ri)*.3,0,ri);
+        ctx.closePath();
+        ctx.globalAlpha=.3+rng()*.12;ctx.fill();
+        // vein
+        ctx.beginPath();ctx.moveTo(0,ri*1.1);ctx.lineTo(0,ro*.92);
+        ctx.lineWidth=R*.004;ctx.globalAlpha=.2;ctx.stroke();
+        ctx.restore();
+      }
+      // ring circle
+      ctx.beginPath();ctx.arc(0,0,R*ring.rIn,0,Math.PI*2);
+      ctx.lineWidth=R*.008;ctx.globalAlpha=.2;ctx.stroke();
+    });
+  } else if(style===1){
+    // Lotus flower
+    const layers=[
+      {n:Math.floor(sym*1.5),rI:.55,rO:.88,w:.2,a:.38},
+      {n:sym,rI:.3,rO:.58,w:.16,a:.42},
+      {n:Math.floor(sym*.6)+3,rI:.08,rO:.32,w:.12,a:.48}
+    ];
+    layers.forEach((l,li)=>{
+      const off=li%2?Math.PI/l.n:0;
+      for(let i=0;i<l.n;i++){
+        const a=Math.PI*2/l.n*i+off;
+        ctx.save();ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(0,R*l.rI);
+        const cp1x=R*l.w*(0.8+rng()*.4);
+        ctx.bezierCurveTo(cp1x,R*(l.rI+l.rO)/2,cp1x*0.6,R*l.rO*0.95,0,R*l.rO);
+        ctx.bezierCurveTo(-cp1x*0.6,R*l.rO*0.95,-cp1x,R*(l.rI+l.rO)/2,0,R*l.rI);
+        ctx.closePath();
+        ctx.globalAlpha=l.a;ctx.fill();
+        ctx.restore();
+      }
+    });
+    // stamen dots
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i;
+      ctx.beginPath();ctx.arc(Math.cos(a)*R*.06,Math.sin(a)*R*.06,R*.018,0,Math.PI*2);
+      ctx.globalAlpha=.35;ctx.fill();
+    }
+  } else {
+    // Geometric star mandala
+    for(let ring=0;ring<4;ring++){
+      const rr=R*(.2+ring*.2);
+      const n2=sym*(ring+1);
+      // star polygon
+      ctx.beginPath();
+      for(let i=0;i<=n2;i++){
+        const a=Math.PI*2/n2*i;
+        const r2=i%2?rr:rr*.65;
+        if(i===0)ctx.moveTo(Math.cos(a)*r2,Math.sin(a)*r2);
+        else ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);
+      }
+      ctx.closePath();ctx.lineWidth=R*.01;ctx.globalAlpha=.3;ctx.stroke();
+      // fill alternating
+      if(ring%2===0){ctx.globalAlpha=.12;ctx.fill();}
+    }
+    // connecting radials
+    for(let i=0;i<sym;i++){
+      ctx.save();ctx.rotate(Math.PI*2/sym*i);
+      ctx.beginPath();ctx.moveTo(0,R*.1);ctx.lineTo(0,R*.88);
+      ctx.lineWidth=R*.006;ctx.globalAlpha=.18;ctx.stroke();
+      // diamond at mid
+      const dy=R*.55,dd=R*.04;
+      ctx.beginPath();ctx.moveTo(0,dy-dd);ctx.lineTo(dd,dy);ctx.lineTo(0,dy+dd);ctx.lineTo(-dd,dy);ctx.closePath();
+      ctx.globalAlpha=.3;ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // center ornament
+  ctx.fillStyle=color;
+  ctx.beginPath();ctx.arc(0,0,R*.07,0,Math.PI*2);ctx.globalAlpha=.45;ctx.fill();
+
+  ctx.globalAlpha=1;ctx.restore();
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t^=t+Math.imul(t^t>>>7,61|t);return((t^t>>>14)>>>0)/4294967296;};}
+
+function hexToRGB(hex){const r=parseInt(hex.slice(1,3),16),gg=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `${r},${gg},${b}`;}
+
+/* ═══════════════════════════════════════════════════
+   Geometry Builder
+   ═══════════════════════════════════════════════════ */
+function bakeDisp(geo,hCanvas,depth,invert){
+  const uv=geo.attributes.uv,pos=geo.attributes.position,nor=geo.attributes.normal;
+  if(!uv||!pos||!nor||!hCanvas) return;
+  const ctx=hCanvas.getContext('2d');
+  const img=ctx.getImageData(0,0,hCanvas.width,hCanvas.height).data;
+  const w=hCanvas.width,h=hCanvas.height;
+  const sign=invert?1:-1;
+  for(let i=0;i<pos.count;i++){
+    const u=uv.getX(i),vv=uv.getY(i);
+    if(u<0||u>1||vv<0||vv>1) continue;
+    if(nor.getY(i)<0.5) continue;
+    // bilinear sample
+    const fx=u*(w-1),fy=(1-vv)*(h-1);
+    const x0=Math.floor(fx),y0=Math.floor(fy);
+    const x1=Math.min(x0+1,w-1),y1=Math.min(y0+1,h-1);
+    const tx=fx-x0,ty=fy-y0;
+    const s00=img[(y0*w+x0)*4]/255;
+    const s10=img[(y0*w+x1)*4]/255;
+    const s01=img[(y1*w+x0)*4]/255;
+    const s11=img[(y1*w+x1)*4]/255;
+    const gray=s00*(1-tx)*(1-ty)+s10*tx*(1-ty)+s01*(1-tx)*ty+s11*tx*ty;
+    if(gray<.002) continue;
+    const d=gray*depth*sign;
+    pos.setXYZ(i,
+      pos.getX(i)+nor.getX(i)*d,
+      pos.getY(i)+nor.getY(i)*d,
+      pos.getZ(i)+nor.getZ(i)*d
+    );
+  }
+  pos.needsUpdate=true;geo.computeVertexNormals();
+}
+
+function rebuild(){
+  cakeGroup.clear();moldGroup.clear();
+
+  const D=v('diameter'),H=v('bodyH'),domeHt=v('domeH'),wD=v('waveD'),wN=v('waveN'),engD=v('engD');
+  const R=D/2;
+
+  // Build profile
+  const pts=[];const segs=80;
+  pts.push(new THREE.Vector2(0,0));
+  pts.push(new THREE.Vector2(R-.4,0));
+  for(let i=0;i<=4;i++) pts.push(new THREE.Vector2(R-.4+.4*Math.sin(i/4*Math.PI/2),.4-.4*Math.cos(i/4*Math.PI/2)));
+  pts.push(new THREE.Vector2(R,H-.4));
+  for(let i=0;i<=4;i++) pts.push(new THREE.Vector2(R-.4+.4*Math.cos(i/4*Math.PI/2),H-.4+.4*Math.sin(i/4*Math.PI/2)));
+  const sY=H;
+  for(let i=0;i<=segs;i++){
+    const t=i/segs;
+    const rc=(R-.4)*(1-t);
+    const hc=sY+domeHt*(1-Math.pow(rc/Math.max(R-.4,.01),2));
+    pts.push(new THREE.Vector2(rc,hc));
+  }
+
+  const geo=new THREE.LatheGeometry(pts,256);
+  const pos=geo.attributes.position,uv=geo.attributes.uv;
+
+  for(let i=0;i<pos.count;i++){
+    let x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+    let rd=Math.sqrt(x*x+z*z);
+
+    // edge style
+    if(rd>R-.6&&y<H&&y>0){
+      const ang=Math.atan2(z,x);
+      const wave=edgeR(ang,wN,wD,curEdge);
+      let w=1;if(y<1)w=y;if(y>H-1)w=H-y;
+      const sc=(rd+wave*w)/rd;
+      pos.setX(i,x*sc);pos.setZ(i,z*sc);
+    }
+
+    // UV: top face → orthographic projection; side/bottom → solid color corner
+    if(y>H-.5){
+      uv.setXY(i, 0.5 + x/D, 0.5 - z/D);
+    } else {
+      // map side faces to top-left corner (pure base color, no pattern)
+      uv.setXY(i, 0.01, 0.01);
+    }
+  }
+  geo.computeVertexNormals();
+
+  const hCanvas=generateCanvas(true);
+  const cCanvas=generateCanvas(false);
+  const cTex=new THREE.CanvasTexture(cCanvas);cTex.encoding=THREE.sRGBEncoding;
+
+  // ── Cake mesh ──
+  const cGeo=geo.clone();
+  bakeDisp(cGeo,hCanvas,engD,false);
+  const cMat=new THREE.MeshStandardMaterial({map:cTex,roughness:.5,metalness:.08});
+  const cake=new THREE.Mesh(cGeo,cMat);
+  cake.castShadow=true;cake.receiveShadow=true;
+  cake.position.y=-H/2;
+  cakeGroup.add(cake);
+
+  // ── Mold (industrial mechanical mold — matching original design) ──
+  const matPlastic=new THREE.MeshStandardMaterial({color:0xfff9e6,roughness:.4,metalness:.1});
+  const matRod=new THREE.MeshStandardMaterial({color:0xd4af37,roughness:.3,metalness:.8});
+  const matSpring=new THREE.MeshStandardMaterial({color:0xcccccc,roughness:.4,metalness:.9});
+
+  // [Housing — outer shell]
+  const housingH=15;
+  const outerR=R+wD+1.5;
+  const hShape=new THREE.Shape();
+  hShape.absarc(0,0,outerR,0,Math.PI*2,false);
+  const hHole=new THREE.Path();
+  for(let i=0;i<=256;i++){
+    const t2=(i/256)*Math.PI*2;
+    const wave2=edgeR(t2,wN,wD,curEdge);
+    const r2=R+wave2+.1;
+    if(i===0)hHole.moveTo(r2,0);else hHole.lineTo(r2*Math.cos(t2),r2*Math.sin(t2));
+  }
+  hShape.holes.push(hHole);
+  const housingGeo=new THREE.ExtrudeGeometry(hShape,{depth:housingH,bevelEnabled:false,curveSegments:64});
+  housingGeo.rotateX(-Math.PI/2);
+  const housing=new THREE.Mesh(housingGeo,matPlastic);
+  housing.castShadow=true;housing.receiveShadow=true;
+
+  // [Frame — legs + beam + guide]
+  const frameGroup=new THREE.Group();
+  const legH2=12, legW2=2, legT2=3;
+  const legGeo2=new THREE.BoxGeometry(legW2,legH2,legT2);
+  const legDist=outerR-legW2/2;
+  const leg1=new THREE.Mesh(legGeo2,matPlastic);
+  leg1.position.set(legDist,housingH+legH2/2,0);leg1.castShadow=true;
+  const leg2=leg1.clone();leg2.position.set(-legDist,housingH+legH2/2,0);
+  const beamH2=2, beamW2=legDist*2+legW2;
+  const beam=new THREE.Mesh(new THREE.BoxGeometry(beamW2,beamH2,legT2),matPlastic);
+  beam.position.set(0,housingH+legH2+beamH2/2,0);beam.castShadow=true;
+  const frameTopY=housingH+legH2+beamH2;
+  const guideH2=10;
+  const guide=new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.6,guideH2,32),matPlastic);
+  guide.position.set(0,frameTopY-guideH2/2,0);guide.castShadow=true;
+  frameGroup.add(leg1,leg2,beam,guide);
+
+  // [Moving group — stamp + rod + handle]
+  const movGrp=new THREE.Group();
+  // stamp plate
+  const stShape=new THREE.Shape();
+  for(let i=0;i<=256;i++){
+    const t2=(i/256)*Math.PI*2;
+    const wave2=edgeR(t2,wN,wD,curEdge);
+    const r2=(R+wave2)*.95;
+    if(i===0)stShape.moveTo(r2,0);else stShape.lineTo(r2*Math.cos(t2),r2*Math.sin(t2));
+  }
+  const stThick=1.5;
+  const stGeo=new THREE.ExtrudeGeometry(stShape,{depth:stThick,bevelEnabled:false,curveSegments:64});
+  stGeo.rotateX(-Math.PI/2);
+  const stampBody=new THREE.Mesh(stGeo,matPlastic);
+  stampBody.castShadow=true;
+  movGrp.add(stampBody);
+  // stamp face (inverted pattern)
+  const mGeo=geo.clone();
+  bakeDisp(mGeo,hCanvas,engD,true);
+  const stampFace=new THREE.Mesh(mGeo,matPlastic);
+  stampFace.rotation.x=Math.PI;
+  stampFace.castShadow=true;
+  movGrp.add(stampFace);
+  // rod & handle calculations
+  const stampRestY=8;
+  const springH2=12;
+  const handleBotY=frameTopY+springH2;
+  const rodBotAbs=stampRestY+stThick;
+  const rodLen=handleBotY-rodBotAbs;
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.8,.8,rodLen,32),matRod);
+  rod.position.y=stThick+rodLen/2;rod.castShadow=true;
+  movGrp.add(rod);
+  const handleH2=2.5;
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(outerR,outerR,handleH2,64),matPlastic);
+  handle.position.y=stThick+rodLen+handleH2/2;handle.castShadow=true;
+  movGrp.add(handle);
+  movGrp.position.y=stampRestY;
+
+  // [Spring]
+  const springPts=[];const coils=7;
+  for(let i=0;i<=100;i++){
+    const t2=i/100,a2=t2*Math.PI*2*coils;
+    springPts.push(new THREE.Vector3(Math.cos(a2)*1.5,t2*springH2,Math.sin(a2)*1.5));
+  }
+  const springCurve=new THREE.CatmullRomCurve3(springPts);
+  const spring=new THREE.Mesh(new THREE.TubeGeometry(springCurve,100,.15,8,false),matSpring);
+  spring.position.y=frameTopY;spring.castShadow=true;
+
+  moldGroup.add(housing,frameGroup,movGrp,spring);
+  moldGroup.position.y=-H/2;
+
+  updateVisibility();
+  updateAnalysis(D,H,domeHt,cGeo);
+  updateDimensions(D,H,domeHt);
+}
+
+function updateVisibility(){
+  const isCake=curView==='cake';
+  cakeGroup.visible=isCake;
+  moldGroup.visible=!isCake;
+  if(gndMesh) gndMesh.visible=isCake;
+  // mold view: free orbit (no polar limit); cake view: restrict to upper hemisphere
+  if(controls){
+    controls.maxPolarAngle=isCake?Math.PI*0.48:Math.PI;
+    controls.minPolarAngle=isCake?0:0;
+  }
+  // wireframe toggle
+  cakeGroup.traverse(o=>{if(o.material)o.material.wireframe=wireMode;});
+  moldGroup.traverse(o=>{if(o.material)o.material.wireframe=wireMode;});
+}
+
+function updateAnalysis(D,H,dome,geo){
+  const mm=D*10,hh=(H+dome)*10;
+  g('aSize').textContent=`${mm.toFixed(0)}×${mm.toFixed(0)}×${hh.toFixed(0)}`;
+  g('aFaces').textContent=(geo.index?geo.index.count/3:geo.attributes.position.count/3).toLocaleString();
+  const vol=Math.PI*(mm/2)**2*hh; // mm³ approximate
+  const wt=vol*0.00124*0.2; // PLA, 20% infill
+  g('aWeight').textContent=`~${Math.max(1,wt).toFixed(0)}g`;
+  const time=hh/0.2*Math.PI*mm/40/3600;
+  g('aTime').textContent=`~${Math.max(.1,time).toFixed(1)}h`;
+}
+function updateDimensions(D,H,dome){
+  g('dD').textContent=`${(D*10).toFixed(1)} mm`;
+  g('dH').textContent=`${((H+dome)*10).toFixed(1)} mm`;
+  g('dW').textContent='≥2 mm';
+}
+
+/* ═══════════════════════════════════════════════════
+   Export
+   ═══════════════════════════════════════════════════ */
+function doExport(fmt){
+  rebuild();
+  const target=curView==='cake'?cakeGroup:moldGroup;
+  const name=`mooncake_${g('mainText').value||'model'}_${Date.now()}`;
+  if(fmt==='stl'){
+    const exp=new THREE.STLExporter();
+    const data=exp.parse(target);
+    dl(new Blob([data],{type:'model/stl'}),name+'.stl');
+  } else {
+    new THREE.GLTFExporter().parse(target,r=>{
+      if(r instanceof ArrayBuffer) dl(new Blob([r],{type:'model/gltf-binary'}),name+'.glb');
+    },{binary:true,onlyVisible:true});
+  }
+}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+
+/* ═══════════════════════════════════════════════════
+   UI Setup
+   ═══════════════════════════════════════════════════ */
+function initUI(){
+  // Edge grid
+  const eg=g('edgeGrid');
+  EDGES.forEach(e=>{
+    const item=document.createElement('div');
+    item.className='edge-item'+(e.id===curEdge?' active':'');
+    const c=document.createElement('canvas');c.width=96;c.height=96;
+    drawEdgePreview(c,e.id);
+    const n=document.createElement('div');n.className='name';n.textContent=e.name;
+    item.append(c,n);
+    item.onclick=()=>{curEdge=e.id;eg.querySelectorAll('.edge-item').forEach(x=>x.classList.remove('active'));item.classList.add('active');rebuild();};
+    eg.appendChild(item);
+  });
+
+  // Pattern grid
+  const pg=g('patternGrid');
+  PATTERNS.forEach(p=>{
+    const item=document.createElement('div');
+    item.className='pattern-item'+(p.id===curPat?' active':'');
+    const c=document.createElement('canvas');c.width=200;c.height=200;
+    drawPatternPreview(c,p.id);
+    const n=document.createElement('div');n.className='name';n.textContent=p.name;
+    item.append(c,n);
+    item.onclick=()=>{curPat=p.id;pg.querySelectorAll('.pattern-item').forEach(x=>x.classList.remove('active'));item.classList.add('active');rebuild();};
+    pg.appendChild(item);
+  });
+
+  // Color grid
+  const cg=g('colorGrid');
+  Object.entries(THEMES).forEach(([k,t])=>{
+    const s=document.createElement('div');
+    s.className='color-swatch'+(k===curTheme?' active':'');
+    s.style.background=`linear-gradient(135deg,${t.base},${t.pat})`;
+    s.title=t.name;
+    s.onclick=()=>{curTheme=k;cg.querySelectorAll('.color-swatch').forEach(x=>x.classList.remove('active'));s.classList.add('active');rebuild();};
+    cg.appendChild(s);
+  });
+
+  // Slider value displays
+  const sliders={diameter:'vD',bodyH:'vH',domeH:'vDome',waveD:'vWD',waveN:'vWN',fontS:'vFS',engD:'vED',maskS:'vMask'};
+  Object.entries(sliders).forEach(([sid,vid])=>{
+    const el=g(sid);
+    if(!el) return;
+    const upd=()=>{
+      const val=parseFloat(el.value);
+      const units={diameter:'cm',bodyH:'cm',engD:'cm'};
+      g(vid).textContent=units[sid]?val.toFixed(1)+units[sid]:(sid==='waveN'?val.toFixed(0):val.toFixed(2));
+    };
+    el.addEventListener('input',()=>{upd();rebuild();});
+    upd();
+  });
+
+  // Text & select
+  ['mainText','fontSel'].forEach(id=>{g(id).addEventListener('input',rebuild);});
+
+  // File upload
+  const fa=g('uploadArea'),fi=g('fileIn');
+  fi.addEventListener('change',e=>{if(e.target.files[0])loadImage(e.target.files[0]);});
+  fa.addEventListener('dragover',e=>{e.preventDefault();fa.style.borderColor='var(--accent)';});
+  fa.addEventListener('dragleave',()=>{fa.style.borderColor='';});
+  fa.addEventListener('drop',e=>{e.preventDefault();fa.style.borderColor='';if(e.dataTransfer.files[0])loadImage(e.dataTransfer.files[0]);});
+}
+
+function loadImage(file){
+  if(!file.type.startsWith('image/')) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      customImg=img;curPat='__custom';
+      const fa=g('uploadArea');
+      fa.classList.add('has-image');
+      fa.innerHTML='';
+      const preview=document.createElement('img');
+      preview.src=e.target.result;
+      fa.appendChild(preview);
+      // deselect pattern grid
+      g('patternGrid').querySelectorAll('.pattern-item').forEach(x=>x.classList.remove('active'));
+      rebuild();
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* Previews */
+function drawEdgePreview(canvas,style){
+  const ctx=canvas.getContext('2d');const s=canvas.width;
+  ctx.fillStyle='#2C2C2E';ctx.fillRect(0,0,s,s);
+  ctx.strokeStyle='#FF9F0A';ctx.lineWidth=2.5;
+  ctx.beginPath();
+  const cx=s/2,cy=s/2,R=s*.36;
+  for(let i=0;i<=256;i++){
+    const a=(i/256)*Math.PI*2;
+    const wave=edgeR(a,16,.35*R/3,style);
+    const r=R+wave;
+    const x=cx+r*Math.cos(a),y=cy+r*Math.sin(a);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.closePath();ctx.stroke();
+}
+
+function drawPatternPreview(canvas,type){
+  const ctx=canvas.getContext('2d');const s=canvas.width;
+  ctx.fillStyle='#1a1a1e';ctx.fillRect(0,0,s,s);
+  const R=s*.44;
+  drawPatternOnCtx(ctx,type,R,'rgba(255,159,10,0.85)',s);
+}
+
+/* ═══════════════════════════════════════════════════
+   View & Mode Controls
+   ═══════════════════════════════════════════════════ */
+function setView(v,btn){
+  curView=v;
+  document.querySelectorAll('.view-tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  updateVisibility();
+}
+function toggleDim(){
+  const el=g('dimOv');el.classList.toggle('show');
+  g('btnDim').classList.toggle('active');
+}
+function toggleWire(){
+  wireMode=!wireMode;
+  g('btnWire').classList.toggle('active');
+  updateVisibility();
+}
+function togSec(el){el.parentElement.classList.toggle('collapsed');}
+function setLayout(n){
+  layoutN=n;
+  g('lay2').classList.toggle('active',n===2);
+  g('lay4').classList.toggle('active',n===4);
+  rebuild();
+}
+
+function aiGen(){
+  aiSeed=Date.now();
+  curPat='__ai';
+  g('patternGrid').querySelectorAll('.pattern-item').forEach(x=>x.classList.remove('active'));
+  // reset upload area if needed
+  const fa=g('uploadArea');
+  if(fa.classList.contains('has-image')){
+    fa.classList.remove('has-image');
+    fa.innerHTML='<i class="fas fa-cloud-arrow-up"></i><span>拖拽或点击上传图片<br><small>自动转为浮雕花纹</small></span>';
+    customImg=null;
+  }
+  rebuild();
+  g('stInfo').textContent='✨ AI 已生成随机花纹图案 · 点击可再次随机';
+}
+
+/* ═══════════════════════════════════════════════════
+   Init
+   ═══════════════════════════════════════════════════ */
+function init(){
+  initScene();
+  initUI();
+  rebuild();
+  animate();
+  // font ready
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>rebuild());
+}
+
+init();
+</script>
+</body>
+</html>

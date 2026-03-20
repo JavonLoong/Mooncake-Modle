@@ -1,0 +1,15 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Legacy Chinese-named files (keep only index.html)
+模具.html
+模具_v2.html
