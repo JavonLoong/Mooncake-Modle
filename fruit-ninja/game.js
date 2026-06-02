@@ -32,6 +32,9 @@ const gameState = {
   inputReady: false,
   viewport: { width: 1, height: 1 },
   audio: null,
+  blade: "classic",
+  dojo: "classic",
+  swipeLock: { active: false, mode: null, startX: 0, startY: 0, startTime: 0 },
 };
 
 const {
@@ -93,6 +96,9 @@ const muteButton = document.getElementById("mute-button");
 const resumeButton = document.getElementById("resume-button");
 const pauseOverlay = document.getElementById("pause-overlay");
 const modeButtons = Array.from(document.querySelectorAll(".mode-button"));
+const bladeSelect = document.getElementById("blade-select");
+const dojoSelect = document.getElementById("dojo-select");
+const stageBg = document.getElementById("stage-bg");
 const MAX_PARTICLES = 180;
 const MAX_SPLASHES = 180;
 const MAX_TRAILS = 480;
@@ -196,14 +202,81 @@ function setPaused(nextPaused) {
     gameState.isPaused = next.isPaused;
   }
 
+  if (gameState.isPaused) {
+    if (currentBgm && currentBgm.gainNode) {
+      currentBgm.gainNode.gain.setValueAtTime(0.08, gameState.audio ? gameState.audio.currentTime : 0);
+    }
+  } else {
+    if (currentBgm && currentBgm.gainNode) {
+      currentBgm.gainNode.gain.setValueAtTime(bgmName === "game_bgm" ? 0.28 : 0.3, gameState.audio ? gameState.audio.currentTime : 0);
+    }
+  }
+
   pauseOverlay.style.display = gameState.isPaused ? "flex" : "none";
   updateControlButtons();
 }
+
+const soundBuffers = {};
+let currentBgm = null;
+let bgmName = null;
+let soundsLoaded = false;
 
 function ensureAudio() {
   if (gameState.audio || !window.AudioContext && !window.webkitAudioContext) return;
   const AudioClass = window.AudioContext || window.webkitAudioContext;
   gameState.audio = new AudioClass();
+}
+
+async function loadSound(name, url) {
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await gameState.audio.decodeAudioData(arrayBuffer);
+    soundBuffers[name] = audioBuffer;
+  } catch (e) {
+    console.warn(`Failed to load sound ${name} from ${url}, using fallback tone:`, e);
+  }
+}
+
+async function initSounds() {
+  ensureAudio();
+  if (!gameState.audio || soundsLoaded) return;
+  soundsLoaded = true;
+  
+  const soundUrls = {
+    slice: 'sounds/slice.mp3',
+    miss: 'sounds/00000001.mp3',
+    bomb_explode: 'sounds/0000001b.mp3',
+    game_start: 'sounds/game_start.mp3',
+    game_over: 'sounds/0000002d.mp3',
+    combo3: 'sounds/0000001c.mp3',
+    combo4: 'sounds/0000001d.mp3',
+    combo5: 'sounds/0000001e.mp3',
+    home_bgm: 'sounds/home_bgm.mp3',
+    game_bgm: 'sounds/game_bgm.mp3'
+  };
+  
+  const promises = Object.entries(soundUrls).map(([name, url]) => loadSound(name, url));
+  await Promise.all(promises);
+  
+  // Play home bgm immediately if audio state is running, otherwise wait for interaction
+  if (gameState.audio.state === "running") {
+    playBgm("home_bgm");
+  } else {
+    const resumeOnInteract = () => {
+      if (gameState.audio && gameState.audio.state === "suspended") {
+        gameState.audio.resume().then(() => {
+          playBgm("home_bgm");
+        });
+      } else {
+        playBgm("home_bgm");
+      }
+      window.removeEventListener("click", resumeOnInteract);
+      window.removeEventListener("touchstart", resumeOnInteract);
+    };
+    window.addEventListener("click", resumeOnInteract);
+    window.addEventListener("touchstart", resumeOnInteract);
+  }
 }
 
 function playTone(frequency, duration, type = "sine", gain = 0.06, delay = 0) {
@@ -222,24 +295,73 @@ function playTone(frequency, duration, type = "sine", gain = 0.06, delay = 0) {
   oscillator.stop(ctx.currentTime + delay + duration + 0.025);
 }
 
+function playSound(name, volume = 0.5, loop = false) {
+  if (gameState.isMuted || !gameState.audio) return null;
+  const buffer = soundBuffers[name];
+  if (!buffer) {
+    // If sound not loaded yet, perform simple fallback tone
+    if (name === 'slice') playTone(600, 0.08, "triangle", 0.05);
+    else if (name === 'bomb_explode') playTone(80, 0.3, "sawtooth", 0.08);
+    else if (name === 'miss') playTone(180, 0.15, "triangle", 0.03);
+    else if (name === 'game_start') playTone(440, 0.1, "sine", 0.05);
+    return null;
+  }
+  
+  const source = gameState.audio.createBufferSource();
+  source.buffer = buffer;
+  source.loop = loop;
+  
+  const gainNode = gameState.audio.createGain();
+  gainNode.gain.setValueAtTime(volume, gameState.audio.currentTime);
+  
+  source.connect(gainNode);
+  gainNode.connect(gameState.audio.destination);
+  source.start(0);
+  return { source, gainNode };
+}
+
+function playBgm(name, volume = 0.3) {
+  if (gameState.isMuted) {
+    bgmName = name;
+    return;
+  }
+  if (currentBgm && bgmName === name) return; // Already playing
+  stopBgm();
+  bgmName = name;
+  currentBgm = playSound(name, volume, true);
+}
+
+function stopBgm() {
+  if (currentBgm && currentBgm.source) {
+    try {
+      currentBgm.source.stop();
+    } catch (e) {}
+    currentBgm = null;
+  }
+}
+
 function playSliceSound(combo) {
-  playTone(520 + combo * 44, 0.09, "triangle", 0.055);
-  playTone(920 + combo * 22, 0.07, "sine", 0.035, 0.025);
+  if (combo >= 5) {
+    playSound('combo5', 0.6);
+  } else if (combo === 4) {
+    playSound('combo4', 0.6);
+  } else if (combo === 3) {
+    playSound('combo3', 0.6);
+  } else {
+    playSound('slice', 0.5);
+  }
 }
 
 function playBombSound() {
-  playTone(90, 0.24, "sawtooth", 0.07);
-  playTone(54, 0.32, "square", 0.045, 0.02);
+  playSound('bomb_explode', 0.8);
 }
 
 function playMissSound() {
-  playTone(180, 0.16, "triangle", 0.035);
+  playSound('miss', 0.4);
 }
 
 function playStartSound() {
-  playTone(330, 0.08, "triangle", 0.05);
-  playTone(494, 0.08, "triangle", 0.05, 0.08);
-  playTone(660, 0.12, "triangle", 0.05, 0.16);
+  playSound('game_start', 0.6);
 }
 
 function currentTimestamp() {
@@ -682,6 +804,74 @@ function addFloatingText(text, x, y, color) {
   });
 }
 
+function spawnBladeParticles(pos, bladeType) {
+  if (Math.random() > 0.45) return;
+  
+  while (gameState.particles.length >= MAX_PARTICLES) {
+    const oldest = gameState.particles.shift();
+    if (oldest) removeSceneObject(oldest.mesh);
+  }
+
+  let color = 0xffffff;
+  let size = 0.08 + Math.random() * 0.12;
+  let geometry;
+  let lifetime = 400 + Math.random() * 300;
+  
+  let vel = {
+    x: (Math.random() - 0.5) * 1.5,
+    y: (Math.random() - 0.5) * 1.5,
+    z: (Math.random() - 0.5) * 0.8,
+    rotationX: (Math.random() - 0.5) * 0.2,
+    rotationY: (Math.random() - 0.5) * 0.2,
+    rotationZ: (Math.random() - 0.5) * 0.2,
+  };
+
+  if (bladeType === "flame") {
+    color = Math.random() > 0.4 ? 0xff4500 : 0xffa500;
+    geometry = new THREE.DodecahedronGeometry(size, 0);
+    vel.y = 2.5 + Math.random() * 3.5;
+    vel.x = (Math.random() - 0.5) * 2;
+  } else if (bladeType === "ice") {
+    color = Math.random() > 0.4 ? 0x00ffff : 0xffffff;
+    geometry = new THREE.SphereGeometry(size, 6, 6);
+    vel.y = -2 - Math.random() * 3;
+    vel.x = (Math.random() - 0.5) * 1.5;
+  } else if (bladeType === "rainbow") {
+    const colors = [0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x0000ff, 0x4b0082, 0x9400d3];
+    color = colors[Math.floor(Math.random() * colors.length)];
+    geometry = new THREE.OctahedronGeometry(size, 0);
+    vel.x = (Math.random() - 0.5) * 3;
+    vel.y = (Math.random() - 0.5) * 3;
+  } else if (bladeType === "shadow") {
+    color = Math.random() > 0.4 ? 0x8a2be2 : 0x4b0082;
+    geometry = new THREE.TorusGeometry(size, size * 0.3, 4, 10);
+    vel.x = (Math.random() - 0.5) * 1;
+    vel.y = (Math.random() - 0.5) * 1;
+  } else {
+    color = 0xffd700;
+    geometry = new THREE.DodecahedronGeometry(size, 0);
+  }
+
+  const mat = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending
+  });
+
+  const mesh = new THREE.Mesh(geometry, mat);
+  mesh.position.copy(pos);
+  mesh.position.z += (Math.random() - 0.5) * 0.5;
+
+  gameState.particles.push({
+    mesh: mesh,
+    createTime: performance.now(),
+    lifetime: lifetime,
+    velocity: vel,
+  });
+  scene.add(mesh);
+}
+
 function addTrail() {
   const speed = calculateHandSpeed();
   if (speed < 0.00018) return;
@@ -698,6 +888,10 @@ function addTrail() {
     lifetime: 220,
     width: Math.min(22, 7 + speed * 33 * 240),
   });
+
+  const fingerPos = normalizedToWorld(gameState.fingerTip);
+  const fingerPos3D = new THREE.Vector3(fingerPos.x, fingerPos.y, 0);
+  spawnBladeParticles(fingerPos3D, gameState.blade);
 }
 
 function flashDanger() {
@@ -794,14 +988,39 @@ function drawFx(deltaTime) {
     const alpha = 1 - age / trail.lifetime;
     const gradient = fxCtx.createLinearGradient(trail.x1, trail.y1, trail.x2, trail.y2);
     gradient.addColorStop(0, `rgba(255,255,255,0)`);
-    gradient.addColorStop(0.25, `rgba(145,238,255,${alpha * 0.65})`);
-    gradient.addColorStop(1, `rgba(255,246,188,${alpha})`);
+    
+    let shadowColor = "rgba(134,226,255,0.9)";
+    
+    if (gameState.blade === "flame") {
+      gradient.addColorStop(0.25, `rgba(255,90,0,${alpha * 0.7})`);
+      gradient.addColorStop(1, `rgba(255,210,0,${alpha})`);
+      shadowColor = `rgba(255,60,0,${alpha})`;
+    } else if (gameState.blade === "ice") {
+      gradient.addColorStop(0.25, `rgba(0,190,255,${alpha * 0.7})`);
+      gradient.addColorStop(1, `rgba(200,240,255,${alpha})`);
+      shadowColor = `rgba(0,210,255,${alpha})`;
+    } else if (gameState.blade === "rainbow") {
+      const hue1 = (now / 4.5) % 360;
+      const hue2 = (now / 4.5 + 80) % 360;
+      gradient.addColorStop(0.25, `hsla(${hue1}, 100%, 65%, ${alpha * 0.75})`);
+      gradient.addColorStop(1, `hsla(${hue2}, 100%, 75%, ${alpha})`);
+      shadowColor = `hsla(${hue1}, 100%, 60%, ${alpha})`;
+    } else if (gameState.blade === "shadow") {
+      gradient.addColorStop(0.25, `rgba(100,0,200,${alpha * 0.6})`);
+      gradient.addColorStop(1, `rgba(240,160,255,${alpha})`);
+      shadowColor = `rgba(160,0,255,${alpha})`;
+    } else {
+      gradient.addColorStop(0.25, `rgba(145,238,255,${alpha * 0.65})`);
+      gradient.addColorStop(1, `rgba(255,246,188,${alpha})`);
+      shadowColor = `rgba(134,226,255,${alpha * 0.9})`;
+    }
+    
     fxCtx.globalAlpha = 1;
     fxCtx.strokeStyle = gradient;
     fxCtx.lineWidth = trail.width * alpha;
     fxCtx.lineCap = "round";
     fxCtx.shadowBlur = 24 * alpha;
-    fxCtx.shadowColor = "rgba(134,226,255,0.9)";
+    fxCtx.shadowColor = shadowColor;
     fxCtx.beginPath();
     fxCtx.moveTo(trail.x1, trail.y1);
     fxCtx.lineTo(trail.x2, trail.y2);
@@ -903,7 +1122,9 @@ function resetGame() {
   if (gameState.audio && gameState.audio.state === "suspended") {
     gameState.audio.resume();
   }
+  initSounds();
   playStartSound();
+  playBgm("game_bgm", 0.28);
 
   const mode = gameModes[gameState.mode];
   clearSpawnTimeouts();
@@ -926,6 +1147,8 @@ function endGame() {
   gameState.isPaused = false;
   gameState.countdownRemaining = null;
   clearSpawnTimeouts();
+  playSound('game_over', 0.7);
+  playBgm("home_bgm", 0.3);
   gameState.objects.forEach((object) => removeSceneObject(object.mesh));
   gameState.particles.forEach((particle) => removeSceneObject(particle.mesh));
   Object.assign(gameState, finishRunState(window.innerWidth, window.innerHeight));
@@ -1061,11 +1284,60 @@ function onHandResults(results) {
     const landmarks = results.multiHandLandmarks[0];
     const screenLandmarks = cameraLandmarksToScreenPoints(landmarks);
     const rawTip = getSmartSlicingPoint(screenLandmarks);
+    
+    // Straight-line Swipe Directional Hysteresis Snap
+    if (!gameState.swipeLock) {
+      gameState.swipeLock = { active: false, mode: null, startX: 0, startY: 0, startTime: 0 };
+    }
+    
+    const prevTarget = gameState.targetFingerTip || gameState.fingerTip || rawTip;
+    const dxRaw = rawTip.x - prevTarget.x;
+    const dyRaw = rawTip.y - prevTarget.y;
+    const distRaw = Math.hypot(dxRaw, dyRaw);
+    
+    if (distRaw > 0.012) {
+      if (!gameState.swipeLock.active) {
+        gameState.swipeLock.active = true;
+        gameState.swipeLock.startX = prevTarget.x;
+        gameState.swipeLock.startY = prevTarget.y;
+        gameState.swipeLock.startTime = performance.now();
+        gameState.swipeLock.mode = null;
+      } else if (gameState.swipeLock.mode === null) {
+        const cumDx = rawTip.x - gameState.swipeLock.startX;
+        const cumDy = rawTip.y - gameState.swipeLock.startY;
+        const cumDist = Math.hypot(cumDx, cumDy);
+        if (cumDist > 0.035) {
+          const angle = Math.abs(Math.atan2(cumDy, cumDx) * 180 / Math.PI);
+          if (angle < 22 || angle > 158) {
+            gameState.swipeLock.mode = 'horizontal';
+          } else if (angle > 68 && angle < 112) {
+            gameState.swipeLock.mode = 'vertical';
+          } else {
+            gameState.swipeLock.mode = 'free';
+          }
+        }
+      }
+    } else {
+      if (gameState.swipeLock.active) {
+        gameState.swipeLock.active = false;
+        gameState.swipeLock.mode = null;
+      }
+    }
+    
+    let adjustedTip = { ...rawTip };
+    if (gameState.swipeLock.active && gameState.swipeLock.mode) {
+      if (gameState.swipeLock.mode === 'horizontal') {
+        adjustedTip.y = gameState.swipeLock.startY;
+      } else if (gameState.swipeLock.mode === 'vertical') {
+        adjustedTip.x = gameState.swipeLock.startX;
+      }
+    }
+
     gameState.handLandmarks = screenLandmarks;
 
     if (!gameState.inputReady) {
-      gameState.targetFingerTip = rawTip;
-      gameState.fingerTip = rawTip;
+      gameState.targetFingerTip = adjustedTip;
+      gameState.fingerTip = adjustedTip;
       gameState.fingerScreen = {
         x: gameState.fingerTip.x * window.innerWidth,
         y: gameState.fingerTip.y * window.innerHeight,
@@ -1077,24 +1349,24 @@ function onHandResults(results) {
       gameState.inputReady = true;
     } else {
       const prevTarget = gameState.targetFingerTip || gameState.fingerTip;
-      const dx = rawTip.x - prevTarget.x;
-      const dy = rawTip.y - prevTarget.y;
+      const dx = adjustedTip.x - prevTarget.x;
+      const dy = adjustedTip.y - prevTarget.y;
       const dist = Math.hypot(dx, dy);
 
       // --- Maximum Speed Cap to prevent teleportation ---
       const MAX_STEP = 0.15;
-      let targetTip = rawTip;
+      let targetTip = adjustedTip;
       if (dist > MAX_STEP && dist > 0) {
         const ratio = MAX_STEP / dist;
         targetTip = {
           x: prevTarget.x + dx * ratio,
           y: prevTarget.y + dy * ratio,
-          z: rawTip.z
+          z: adjustedTip.z
         };
       }
 
       gameState.targetFingerTip = targetTip;
-      
+
       gameState.velocity = {
         x: targetTip.x - prevTarget.x,
         y: targetTip.y - prevTarget.y
@@ -1109,7 +1381,7 @@ function onHandResults(results) {
     // Hand NOT detected in this frame
     if (gameState.inputReady && (gameState.lostFramesCount || 0) < MAX_LOST_FRAMES) {
       gameState.lostFramesCount = (gameState.lostFramesCount || 0) + 1;
-      
+
       // --- Inertial Prediction (惯性预测) ---
       if (gameState.velocity) {
         gameState.velocity.x *= 0.85;
@@ -1160,9 +1432,34 @@ async function setupHandTracking() {
 
   hands.onResults(onHandResults);
 
-  const stream = await navigator.mediaDevices.getUserMedia(cameraConstraints(isMobileDevice()));
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(cameraConstraints(isMobileDevice()));
+  } catch (err) {
+    console.warn("Failed to get user media with ideal constraints, retrying with simple constraints:", err);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch (retryErr) {
+      console.error("Camera access failed completely:", retryErr);
+      throw new Error("Unable to access camera. Please check permissions and browser compatibility.");
+    }
+  }
   videoElement.srcObject = stream;
-  await videoElement.play();
+  
+  try {
+    await videoElement.play();
+  } catch (playErr) {
+    console.warn("Autoplay blocked, registering user interaction listeners to start video:", playErr);
+    const startPlay = () => {
+      videoElement.play().catch(e => console.error("Autoplay retry failed:", e));
+      window.removeEventListener("click", startPlay);
+      window.removeEventListener("touchstart", startPlay);
+      window.removeEventListener("keydown", startPlay);
+    };
+    window.addEventListener("click", startPlay);
+    window.addEventListener("touchstart", startPlay);
+    window.addEventListener("keydown", startPlay);
+  }
 
   let sendingFrame = false;
   const processFrame = async () => {
@@ -1182,6 +1479,7 @@ async function setupHandTracking() {
 }
 
 async function init() {
+  initSounds();
   gameState.bestScore = loadBestScore(gameState.mode);
   updateHud();
   updateControlButtons();
@@ -1207,6 +1505,11 @@ async function init() {
   muteButton.addEventListener("click", () => {
     gameState.isMuted = !gameState.isMuted;
     updateControlButtons();
+    if (gameState.isMuted) {
+      stopBgm();
+    } else {
+      if (bgmName) playBgm(bgmName);
+    }
   });
   window.addEventListener("keydown", (event) => {
     if (event.key.toLowerCase() === "p") {
@@ -1217,6 +1520,38 @@ async function init() {
       updateControlButtons();
     }
   });
+
+  // Initialize Blade and Dojo skins
+  gameState.blade = localStorage.getItem("fruit-ninja-blade") || "classic";
+  gameState.dojo = localStorage.getItem("fruit-ninja-dojo") || "classic";
+  
+  if (bladeSelect) {
+    bladeSelect.value = gameState.blade;
+    bladeSelect.addEventListener("change", (e) => {
+      gameState.blade = e.target.value;
+      localStorage.setItem("fruit-ninja-blade", gameState.blade);
+    });
+  }
+  
+  if (dojoSelect) {
+    dojoSelect.value = gameState.dojo;
+    const updateDojoTheme = () => {
+      if (gameState.dojo === "classic") {
+        stageBg.style.background = "url('background2.png') center/cover no-repeat";
+      } else if (gameState.dojo === "sakura") {
+        stageBg.style.background = "url('sakura_dojo.png') center/cover no-repeat";
+      } else if (gameState.dojo === "cyber") {
+        stageBg.style.background = "url('cyber_dojo.png') center/cover no-repeat";
+      }
+    };
+    updateDojoTheme();
+    dojoSelect.addEventListener("change", (e) => {
+      gameState.dojo = e.target.value;
+      localStorage.setItem("fruit-ninja-dojo", gameState.dojo);
+      updateDojoTheme();
+    });
+  }
+
   scheduleGameLoop();
 
   try {
@@ -1225,7 +1560,13 @@ async function init() {
   } catch (error) {
     console.warn(error);
     enablePointerFallback();
-    loadingMessage.textContent = "摄像头初始化失败。已自动降级为鼠标指针模拟模式。";
+    if (window.location.protocol === "file:") {
+      loadingMessage.textContent = "本地文件协议 (file://) 限制了 Edge 的摄像头调用。请在 Chrome 中运行，或使用本地服务器 (http://localhost)，或访问已部署的 GitHub Pages 链接。已降级为鼠标指针模拟模式。";
+    } else if (!window.isSecureContext) {
+      loadingMessage.textContent = "非安全上下文 (HTTP) 限制了摄像头调用。请使用安全上下文 (HTTPS) 访问。已降级为鼠标模式。";
+    } else {
+      loadingMessage.textContent = "摄像头或手势模型初始化失败。已自动降级为鼠标指针模拟模式。";
+    }
     loadingScreen.style.display = "none";
   }
 }

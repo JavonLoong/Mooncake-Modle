@@ -470,213 +470,423 @@ function drawPatternOnCtx(ctx,type,R,color,size){
     }
 
   } else if(type==='cloud'){
-    // 如意祥云纹 — refined multi-layer ruyi cloud
-    ctx.shadowBlur=6;ctx.shadowColor=color;
-    function drawRuyi(cx2,cy2,r,rot){
+    // ═══ 如意祥云纹 — 多层如意云头 + 卷草连接 + 中心宝相花 ═══
+    ctx.shadowBlur=10;ctx.shadowColor=color;
+
+    // Helper: draw a single luxurious ruyi cloud head
+    function drawCloudHead(cx2,cy2,r,rot,alpha){
       ctx.save();ctx.translate(cx2,cy2);ctx.rotate(rot);
-      // double-lobe ruyi head
-      ctx.beginPath();
-      ctx.arc(-r*.35,0,r*.45,0,Math.PI*2);ctx.globalAlpha=.32;ctx.fill();
-      ctx.beginPath();
-      ctx.arc(r*.35,0,r*.45,0,Math.PI*2);ctx.globalAlpha=.32;ctx.fill();
-      // center overlap bead
-      ctx.beginPath();ctx.arc(0,-r*.1,r*.25,0,Math.PI*2);ctx.globalAlpha=.28;ctx.fill();
-      // curling tail
-      ctx.beginPath();ctx.lineWidth=R*.012;ctx.lineCap='round';
-      ctx.moveTo(0,r*.35);
-      ctx.bezierCurveTo(r*.2,r*.7,r*.1,r*1.1,0,r*1.3);
-      ctx.globalAlpha=.3;ctx.stroke();
+      // Triple-lobe cloud head (三朵式如意头)
+      const lobes=[{x:-r*.38,y:0,s:r*.42},{x:r*.38,y:0,s:r*.42},{x:0,y:-r*.2,s:r*.35}];
+      lobes.forEach(l=>{
+        ctx.beginPath();ctx.arc(l.x,l.y,l.s,0,Math.PI*2);
+        ctx.globalAlpha=alpha;ctx.fill();
+      });
+      // Outline for definition
+      ctx.globalAlpha=alpha*.6;ctx.lineWidth=R*.006;
+      lobes.forEach(l=>{
+        ctx.beginPath();ctx.arc(l.x,l.y,l.s,0,Math.PI*2);ctx.stroke();
+      });
+      // Inner highlight arcs on each lobe
+      ctx.globalAlpha=alpha*.4;ctx.lineWidth=R*.004;
+      lobes.forEach(l=>{
+        ctx.beginPath();ctx.arc(l.x,l.y,l.s*.6,-Math.PI*.8,Math.PI*.2);ctx.stroke();
+      });
       ctx.restore();
     }
-    // 8-fold radial outer ring
-    for(let i=0;i<8;i++){
-      const a=Math.PI*2/8*i;
-      drawRuyi(Math.cos(a)*R*.62,Math.sin(a)*R*.62,R*.16,a+Math.PI/2);
-    }
-    // inner 4-fold ring
-    for(let i=0;i<4;i++){
-      const a=Math.PI*2/4*i+Math.PI/4;
-      drawRuyi(Math.cos(a)*R*.3,Math.sin(a)*R*.3,R*.1,a+Math.PI/2);
-    }
-    // connecting arcs between outer clouds
-    ctx.lineWidth=R*.008;ctx.lineCap='round';
-    for(let i=0;i<8;i++){
-      const a1=Math.PI*2/8*i,a2=Math.PI*2/8*(i+1);
-      const m=(a1+a2)/2;
+    // Helper: curving tendril tail
+    function drawTendril(x1,y1,x2,y2,curl,alpha){
+      ctx.globalAlpha=alpha;ctx.lineWidth=R*.01;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(x1,y1);
+      ctx.bezierCurveTo(x1+curl,y1+(y2-y1)*.4, x2-curl,y1+(y2-y1)*.6, x2,y2);
+      ctx.stroke();
+      // spiral curl at end
+      const steps=12,spiralR=R*.03;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a1)*R*.5,Math.sin(a1)*R*.5);
-      ctx.quadraticCurveTo(Math.cos(m)*R*.42,Math.sin(m)*R*.42,Math.cos(a2)*R*.5,Math.sin(a2)*R*.5);
-      ctx.globalAlpha=.2;ctx.stroke();
+      for(let i=0;i<=steps;i++){
+        const t=i/steps,a=t*Math.PI*1.5;
+        const sr=spiralR*(1-t);
+        const px=x2+Math.cos(a)*sr,py=y2+Math.sin(a)*sr;
+        if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+      }
+      ctx.globalAlpha=alpha*.7;ctx.stroke();
     }
-    // center motif
-    ctx.beginPath();ctx.arc(0,0,R*.09,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
+
+    // Outer ring of 6 large cloud heads
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2/6*i;
+      const cx2=Math.cos(a)*R*.7,cy2=Math.sin(a)*R*.7;
+      drawCloudHead(cx2,cy2,R*.18,a-Math.PI/2,.3);
+    }
+    // Connecting tendrils between outer clouds
+    for(let i=0;i<6;i++){
+      const a1=Math.PI*2/6*i,a2=Math.PI*2/6*((i+1)%6);
+      const x1=Math.cos(a1)*R*.55,y1=Math.sin(a1)*R*.55;
+      const x2=Math.cos(a2)*R*.55,y2=Math.sin(a2)*R*.55;
+      const mx=(x1+x2)/2,my=(y1+y2)/2;
+      ctx.globalAlpha=.25;ctx.lineWidth=R*.008;
+      ctx.beginPath();ctx.moveTo(x1,y1);
+      ctx.quadraticCurveTo(mx*.7,my*.7,x2,y2);
+      ctx.stroke();
+    }
+    // Inner ring of 6 smaller cloud heads (offset)
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2/6*i+Math.PI/6;
+      drawCloudHead(Math.cos(a)*R*.38,Math.sin(a)*R*.38,R*.12,a-Math.PI/2,.28);
+    }
+    // Inner tendrils
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2/6*i;
+      drawTendril(Math.cos(a)*R*.22,Math.sin(a)*R*.22,
+                  Math.cos(a)*R*.52,Math.sin(a)*R*.52,R*.08,.2);
+    }
+    // Decorative ring borders
+    ctx.globalAlpha=.25;ctx.lineWidth=R*.005;
+    ctx.beginPath();ctx.arc(0,0,R*.88,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.arc(0,0,R*.85,0,Math.PI*2);ctx.stroke();
+    // Dot ring on border
+    for(let i=0;i<24;i++){
+      const a=Math.PI*2/24*i;
+      ctx.beginPath();ctx.arc(Math.cos(a)*R*.865,Math.sin(a)*R*.865,R*.008,0,Math.PI*2);
+      ctx.globalAlpha=.3;ctx.fill();
+    }
+    // Center: mini rosette
+    for(let i=0;i<8;i++){
+      ctx.save();ctx.rotate(Math.PI*2/8*i);
+      ctx.beginPath();ctx.moveTo(0,R*.04);
+      ctx.bezierCurveTo(R*.04,R*.08,R*.04,R*.14,0,R*.16);
+      ctx.bezierCurveTo(-R*.04,R*.14,-R*.04,R*.08,0,R*.04);
+      ctx.closePath();ctx.globalAlpha=.38;ctx.fill();
+      ctx.restore();
+    }
+    ctx.beginPath();ctx.arc(0,0,R*.05,0,Math.PI*2);ctx.globalAlpha=.45;ctx.fill();
 
   } else if(type==='grain'){
-    // 五谷丰登 — wheat ear with leaf-shaped grains, 6-arm spiral
-    ctx.shadowBlur=4;ctx.shadowColor=color;
-    const arms2=6;
-    for(let arm=0;arm<arms2;arm++){
-      const baseA=Math.PI*2/arms2*arm;
-      ctx.save();ctx.rotate(baseA);
-      // curved stalk
-      ctx.lineWidth=R*.014;ctx.lineCap='round';ctx.globalAlpha=.38;
-      ctx.beginPath();ctx.moveTo(0,R*.1);
-      ctx.bezierCurveTo(R*.08,R*.3,-R*.04,R*.55,R*.02,R*.82);
+    // ═══ 五谷丰登 — 饱满麦穗环绕 + 中心谷物堆 ═══
+    ctx.shadowBlur=8;ctx.shadowColor=color;
+
+    // Helper: draw a plump wheat ear
+    function drawWheatEar(startX,startY,length,angle,grainCount,earWidth){
+      ctx.save();ctx.translate(startX,startY);ctx.rotate(angle);
+
+      // Main curved stalk
+      ctx.lineWidth=R*.012;ctx.lineCap='round';ctx.globalAlpha=.4;
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.bezierCurveTo(length*.1,-length*.3,-length*.05,-length*.6,0,-length);
       ctx.stroke();
-      // leaf-shaped grains on both sides
-      for(let j=0;j<9;j++){
-        const t=.12+j*.085;
-        const bt=t/.82;
-        const sx=R*(.08*3*bt*(1-bt)*(1-bt)+(-.04)*3*bt*bt*(1-bt)+.02*bt*bt*bt);
-        const gy=R*t;
+
+      // Plump grains on alternating sides
+      for(let j=0;j<grainCount;j++){
+        const t=(j+1)/(grainCount+1);
+        // position along stalk curve
+        const cy2=-length*t;
+        const cx2=length*.1*Math.sin(t*Math.PI)*(1-t);
+        const gSize=earWidth*(0.6+0.4*Math.sin(t*Math.PI));
         for(let side=-1;side<=1;side+=2){
-          ctx.save();
-          ctx.translate(sx,gy);
-          ctx.rotate(side*0.5+(j%2?0.15:-0.15));
+          ctx.save();ctx.translate(cx2,cy2);
+          const gAngle=side*(0.4+t*0.3);
+          ctx.rotate(gAngle);
+          // Teardrop grain shape
           ctx.beginPath();
           ctx.moveTo(0,0);
-          ctx.bezierCurveTo(side*R*.03,-R*.03,side*R*.045,-R*.06,0,-R*.075);
-          ctx.bezierCurveTo(-side*R*.015,-R*.05,-side*R*.01,-R*.02,0,0);
+          ctx.bezierCurveTo(gSize*.8,-gSize*.3,gSize*.7,-gSize*.9,0,-gSize*1.1);
+          ctx.bezierCurveTo(-gSize*.7,-gSize*.9,-gSize*.8,-gSize*.3,0,0);
           ctx.closePath();
-          ctx.globalAlpha=.35;ctx.fill();
+          ctx.globalAlpha=.32;ctx.fill();
+          ctx.globalAlpha=.15;ctx.lineWidth=R*.003;ctx.stroke();
+          // Grain center line
+          ctx.beginPath();ctx.moveTo(0,-gSize*.1);ctx.lineTo(0,-gSize*.85);
+          ctx.lineWidth=R*.002;ctx.globalAlpha=.15;ctx.stroke();
           ctx.restore();
         }
       }
+      // Awn (芒) at tip
+      ctx.lineWidth=R*.004;ctx.globalAlpha=.25;
+      for(let k=-1;k<=1;k++){
+        ctx.beginPath();ctx.moveTo(0,-length);
+        ctx.bezierCurveTo(k*length*.08,-length*1.05,k*length*.12,-length*1.15,k*length*.06,-length*1.2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
-    // center seed cluster
-    for(let i=0;i<7;i++){
-      const a=i===0?0:Math.PI*2/6*i;
-      const rd=i===0?0:R*.05;
-      ctx.beginPath();ctx.arc(Math.cos(a)*rd,Math.sin(a)*rd,R*.022,0,Math.PI*2);
-      ctx.globalAlpha=.4;ctx.fill();
+
+    // Outer ring: 8 large wheat ears radiating outward
+    for(let i=0;i<8;i++){
+      const a=Math.PI*2/8*i;
+      drawWheatEar(Math.cos(a)*R*.28,Math.sin(a)*R*.28, R*.55, a-Math.PI/2, 7, R*.06);
+    }
+    // Inner ring: 8 smaller ears (offset)
+    for(let i=0;i<8;i++){
+      const a=Math.PI*2/8*i+Math.PI/8;
+      drawWheatEar(Math.cos(a)*R*.15,Math.sin(a)*R*.15, R*.3, a-Math.PI/2, 5, R*.04);
+    }
+    // Decorative border rings
+    ctx.globalAlpha=.2;ctx.lineWidth=R*.006;
+    ctx.beginPath();ctx.arc(0,0,R*.9,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=.15;ctx.lineWidth=R*.003;
+    ctx.beginPath();ctx.arc(0,0,R*.87,0,Math.PI*2);ctx.stroke();
+    // Center: grain cluster (丰收谷堆)
+    for(let ring=0;ring<3;ring++){
+      const n=ring===0?1:(ring===1?6:12);
+      const rd=ring===0?0:(ring===1?R*.06:R*.12);
+      for(let i=0;i<n;i++){
+        const a=Math.PI*2/n*i+(ring===2?Math.PI/12:0);
+        const gx=Math.cos(a)*rd,gy=Math.sin(a)*rd;
+        // round grain
+        ctx.beginPath();ctx.arc(gx,gy,R*.025-ring*.004,0,Math.PI*2);
+        ctx.globalAlpha=.4-ring*.05;ctx.fill();
+        ctx.globalAlpha=.2;ctx.lineWidth=R*.002;ctx.stroke();
+      }
     }
 
   } else if(type==='branch'){
-    // 缠枝莲 — interlocking vine with small flowers
-    ctx.shadowBlur=5;ctx.shadowColor=color;
-    const sym2=6;
-    for(let s=0;s<sym2;s++){
-      ctx.save();ctx.rotate(Math.PI*2/sym2*s);
-      // S-curve vine
-      ctx.lineWidth=R*.016;ctx.lineCap='round';
-      ctx.beginPath();ctx.moveTo(0,R*.15);
-      ctx.bezierCurveTo(R*.25,R*.25,R*.1,R*.5,-R*.08,R*.68);
-      ctx.bezierCurveTo(-R*.15,R*.76,R*.02,R*.85,R*.08,R*.88);
-      ctx.globalAlpha=.35;ctx.stroke();
-      // small leaves along vine
-      const leafPts=[[R*.12,R*.23,.7],[R*.14,R*.38,-.5],[-R*.02,R*.55,.9],[-R*.1,R*.7,-.6],[R*.04,R*.84,.5]];
-      leafPts.forEach(([lx,ly,lr])=>{
-        ctx.save();ctx.translate(lx,ly);ctx.rotate(lr);
-        ctx.beginPath();
-        ctx.moveTo(0,0);
-        ctx.bezierCurveTo(R*.05,-R*.025,R*.06,-R*.08,0,-R*.11);
-        ctx.bezierCurveTo(-R*.06,-R*.08,-R*.05,-R*.025,0,0);
-        ctx.closePath();ctx.globalAlpha=.3;ctx.fill();
-        // leaf midrib
-        ctx.beginPath();ctx.moveTo(0,-R*.005);ctx.lineTo(0,-R*.09);
-        ctx.lineWidth=R*.003;ctx.globalAlpha=.2;ctx.stroke();
-        ctx.restore();
-      });
-      // small 5-petal flower at vine end
-      ctx.save();ctx.translate(R*.08,R*.88);
-      for(let p=0;p<5;p++){
-        ctx.save();ctx.rotate(Math.PI*2/5*p);
-        ctx.beginPath();
-        ctx.moveTo(0,0);
-        ctx.bezierCurveTo(R*.025,-R*.01,R*.03,-R*.04,0,-R*.055);
-        ctx.bezierCurveTo(-R*.03,-R*.04,-R*.025,-R*.01,0,0);
-        ctx.closePath();ctx.globalAlpha=.35;ctx.fill();
+    // ═══ 缠枝莲 — 优雅S形藤蔓 + 盛开莲花 + 卷叶 ═══
+    ctx.shadowBlur=8;ctx.shadowColor=color;
+
+    // Helper: draw a blooming lotus flower
+    function drawLotus(cx2,cy2,r,rot,alpha){
+      ctx.save();ctx.translate(cx2,cy2);ctx.rotate(rot);
+      // Outer petals (8)
+      for(let p=0;p<8;p++){
+        ctx.save();ctx.rotate(Math.PI*2/8*p);
+        ctx.beginPath();ctx.moveTo(0,r*.2);
+        ctx.bezierCurveTo(r*.28,r*.35,r*.25,r*.75,0,r);
+        ctx.bezierCurveTo(-r*.25,r*.75,-r*.28,r*.35,0,r*.2);
+        ctx.closePath();ctx.globalAlpha=alpha;ctx.fill();
+        ctx.globalAlpha=alpha*.5;ctx.lineWidth=R*.003;ctx.stroke();
+        // Petal vein
+        ctx.beginPath();ctx.moveTo(0,r*.25);ctx.lineTo(0,r*.85);
+        ctx.lineWidth=R*.002;ctx.globalAlpha=alpha*.3;ctx.stroke();
         ctx.restore();
       }
-      ctx.beginPath();ctx.arc(0,0,R*.015,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
+      // Inner petals (5, offset)
+      for(let p=0;p<5;p++){
+        ctx.save();ctx.rotate(Math.PI*2/5*p+Math.PI/8);
+        ctx.beginPath();ctx.moveTo(0,r*.1);
+        ctx.bezierCurveTo(r*.18,r*.2,r*.16,r*.45,0,r*.55);
+        ctx.bezierCurveTo(-r*.16,r*.45,-r*.18,r*.2,0,r*.1);
+        ctx.closePath();ctx.globalAlpha=alpha*1.2;ctx.fill();
+        ctx.restore();
+      }
+      // Center pistil
+      ctx.beginPath();ctx.arc(0,0,r*.12,0,Math.PI*2);ctx.globalAlpha=alpha*1.1;ctx.fill();
+      for(let d=0;d<6;d++){
+        const da=Math.PI*2/6*d;
+        ctx.beginPath();ctx.arc(Math.cos(da)*r*.07,Math.sin(da)*r*.07,r*.025,0,Math.PI*2);
+        ctx.globalAlpha=alpha*.6;ctx.fill();
+      }
       ctx.restore();
+    }
+    // Helper: curling leaf pair
+    function drawLeafPair(lx,ly,lAngle,lSize){
+      ctx.save();ctx.translate(lx,ly);ctx.rotate(lAngle);
+      for(let side=-1;side<=1;side+=2){
+        ctx.beginPath();ctx.moveTo(0,0);
+        ctx.bezierCurveTo(side*lSize*.6,-lSize*.2,side*lSize*.7,-lSize*.7,side*lSize*.2,-lSize);
+        ctx.bezierCurveTo(side*lSize*.1,-lSize*.6,side*lSize*.15,-lSize*.3,0,0);
+        ctx.closePath();ctx.globalAlpha=.25;ctx.fill();
+        ctx.globalAlpha=.12;ctx.lineWidth=R*.002;ctx.stroke();
+      }
       ctx.restore();
     }
 
-  } else if(type==='lattice'){
-    // 冰裂纹窗棂 — hexagonal ice-crack lattice
-    ctx.lineWidth=R*.018;ctx.lineCap='round';ctx.lineJoin='round';
-    // concentric hexagonal rings
-    for(let ring=0;ring<4;ring++){
-      const rr=R*(.2+ring*.2);
+    // 6 large lotus flowers arranged in a ring
+    const flowerR=R*.16;
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2/6*i;
+      drawLotus(Math.cos(a)*R*.6,Math.sin(a)*R*.6,flowerR,a,.3);
+    }
+    // S-curve vines connecting flowers
+    ctx.lineWidth=R*.012;ctx.lineCap='round';
+    for(let i=0;i<6;i++){
+      const a1=Math.PI*2/6*i,a2=Math.PI*2/6*((i+1)%6);
+      const x1=Math.cos(a1)*R*.52,y1=Math.sin(a1)*R*.52;
+      const x2=Math.cos(a2)*R*.52,y2=Math.sin(a2)*R*.52;
+      const mx=(x1+x2)/2,my=(y1+y2)/2;
+      // Main vine
+      ctx.beginPath();ctx.moveTo(x1,y1);
+      ctx.bezierCurveTo(mx+R*.12,my-R*.12,mx-R*.12,my+R*.12,x2,y2);
+      ctx.globalAlpha=.3;ctx.stroke();
+      // Leaves along vine
+      const midA=(a1+a2)/2;
+      drawLeafPair(Math.cos(midA)*R*.48,Math.sin(midA)*R*.48,midA,R*.08);
+    }
+    // Inner vines connecting to center
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2/6*i+Math.PI/6;
       ctx.beginPath();
-      for(let i=0;i<=6;i++){
-        const a=Math.PI*2/6*i-Math.PI/6;
-        const x2=Math.cos(a)*rr,y2=Math.sin(a)*rr;
-        if(i===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
-      }
-      ctx.closePath();ctx.globalAlpha=.3;ctx.stroke();
-    }
-    // radial spokes
-    for(let i=0;i<12;i++){
-      const a=Math.PI*2/12*i;
-      ctx.beginPath();ctx.moveTo(Math.cos(a)*R*.15,Math.sin(a)*R*.15);
-      ctx.lineTo(Math.cos(a)*R*.88,Math.sin(a)*R*.88);
+      ctx.moveTo(Math.cos(a)*R*.35,Math.sin(a)*R*.35);
+      ctx.bezierCurveTo(Math.cos(a)*R*.2,Math.sin(a)*R*.2,0,0,0,0);
       ctx.lineWidth=R*.008;ctx.globalAlpha=.2;ctx.stroke();
+      drawLeafPair(Math.cos(a)*R*.28,Math.sin(a)*R*.28,a+Math.PI/3,R*.06);
     }
-    // ice-crack fills in cells
-    for(let ring=0;ring<3;ring++){
-      const rr=R*(.3+ring*.2);
-      for(let i=0;i<6;i++){
-        const a=Math.PI*2/6*i+(ring%2?Math.PI/6:0);
-        const cx2=Math.cos(a)*rr,cy2=Math.sin(a)*rr;
-        for(let k=0;k<3;k++){
-          const ca=Math.PI*2/3*k+ring;
-          const cl=R*.06;
-          ctx.beginPath();ctx.moveTo(cx2,cy2);
-          ctx.lineTo(cx2+Math.cos(ca)*cl,cy2+Math.sin(ca)*cl);
-          ctx.lineWidth=R*.006;ctx.globalAlpha=.18;ctx.stroke();
+    // Border rings
+    ctx.globalAlpha=.2;ctx.lineWidth=R*.005;
+    ctx.beginPath();ctx.arc(0,0,R*.88,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.arc(0,0,R*.85,0,Math.PI*2);ctx.stroke();
+    // Center: small lotus
+    drawLotus(0,0,R*.12,0,.35);
+
+  } else if(type==='lattice'){
+    // ═══ 窗棂万字纹 — 回纹填充 + 交织几何框 ═══
+    ctx.shadowBlur=6;ctx.shadowColor=color;
+
+    // Helper: draw a filled petal shape in a sector
+    function drawGeoPetal(angle,rIn,rOut,width,alpha){
+      ctx.save();ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0,rIn);
+      // diamond/pointed petal
+      ctx.lineTo(width,rIn+(rOut-rIn)*.4);
+      ctx.lineTo(0,rOut);
+      ctx.lineTo(-width,rIn+(rOut-rIn)*.4);
+      ctx.closePath();
+      ctx.globalAlpha=alpha;ctx.fill();
+      ctx.globalAlpha=alpha*.5;ctx.lineWidth=R*.003;ctx.stroke();
+      ctx.restore();
+    }
+
+    const sym=8;
+    // ── Layer 1: outermost pointed star ring ──
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i;
+      drawGeoPetal(a,R*.68,R*.88,R*.12,.28);
+    }
+    // Between star points: smaller inverted petals
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i+Math.PI/sym;
+      drawGeoPetal(a,R*.72,R*.84,R*.06,.18);
+    }
+    // ── Layer 2: mid ring — overlapping diamond tiles ──
+    for(let i=0;i<sym*2;i++){
+      const a=Math.PI*2/(sym*2)*i;
+      ctx.save();ctx.rotate(a);
+      ctx.beginPath();
+      const midR=R*.52;
+      ctx.moveTo(0,midR-R*.1);
+      ctx.lineTo(R*.06,midR);
+      ctx.lineTo(0,midR+R*.1);
+      ctx.lineTo(-R*.06,midR);
+      ctx.closePath();
+      ctx.globalAlpha=.22;ctx.fill();
+      ctx.globalAlpha=.15;ctx.lineWidth=R*.003;ctx.stroke();
+      ctx.restore();
+    }
+    // ── Layer 3: inner flower ring ──
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i;
+      drawGeoPetal(a,R*.26,R*.46,R*.09,.3);
+    }
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i+Math.PI/sym;
+      drawGeoPetal(a,R*.3,R*.42,R*.05,.2);
+    }
+    // ── Concentric rings for structure ──
+    [.9,.87,.66,.48,.25].forEach((r,idx)=>{
+      ctx.beginPath();ctx.arc(0,0,R*r,0,Math.PI*2);
+      ctx.lineWidth=R*(idx<2?.006:.004);ctx.globalAlpha=.22;ctx.stroke();
+    });
+    // ── Radial lines ──
+    for(let i=0;i<sym;i++){
+      const a=Math.PI*2/sym*i;
+      ctx.beginPath();ctx.moveTo(Math.cos(a)*R*.18,Math.sin(a)*R*.18);
+      ctx.lineTo(Math.cos(a)*R*.88,Math.sin(a)*R*.88);
+      ctx.lineWidth=R*.004;ctx.globalAlpha=.15;ctx.stroke();
+    }
+    // ── Center rosette ──
+    for(let i=0;i<sym;i++){
+      ctx.save();ctx.rotate(Math.PI*2/sym*i);
+      ctx.beginPath();ctx.moveTo(0,R*.05);
+      ctx.bezierCurveTo(R*.05,R*.1,R*.04,R*.18,0,R*.2);
+      ctx.bezierCurveTo(-R*.04,R*.18,-R*.05,R*.1,0,R*.05);
+      ctx.closePath();ctx.globalAlpha=.4;ctx.fill();
+      ctx.restore();
+    }
+    ctx.beginPath();ctx.arc(0,0,R*.06,0,Math.PI*2);ctx.globalAlpha=.45;ctx.fill();
+    // Dot accents on outer ring
+    for(let i=0;i<sym*3;i++){
+      const a=Math.PI*2/(sym*3)*i;
+      ctx.beginPath();ctx.arc(Math.cos(a)*R*.87,Math.sin(a)*R*.87,R*.007,0,Math.PI*2);
+      ctx.globalAlpha=.25;ctx.fill();
+    }
+
+  } else if(type==='wave'){
+    // ═══ 海水江崖纹 — 同心弧浪 + 层叠渐变 + 礁石基座 ═══
+    ctx.shadowBlur=8;ctx.shadowColor=color;
+
+    // Use radial symmetry for round mooncake surface
+    const rings=7;
+    // ── Concentric wave rings (from outside in) ──
+    for(let ring=0;ring<rings;ring++){
+      const ringR=R*(.88-ring*.12);
+      const waveCount=Math.max(6,Math.floor(18-ring*2));
+      const waveH=R*(.06+ring*.005);
+      ctx.lineWidth=R*(.01-.0005*ring);
+
+      for(let w=0;w<waveCount;w++){
+        const a=Math.PI*2/waveCount*w;
+        const aNext=Math.PI*2/waveCount*(w+0.5);
+        const x1=Math.cos(a)*ringR,y1=Math.sin(a)*ringR;
+        const xMid=Math.cos(aNext)*(ringR-waveH),yMid=Math.sin(aNext)*(ringR-waveH);
+
+        // Wave crest (scallop arc)
+        ctx.beginPath();
+        const aStart=a-Math.PI/waveCount*.8;
+        const aEnd=a+Math.PI/waveCount*.8;
+        ctx.arc(0,0,ringR,aStart,aEnd);
+        ctx.globalAlpha=.28-.01*ring;ctx.stroke();
+
+        // Inner filled scallop for depth
+        if(ring%2===0){
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(aStart)*ringR,Math.sin(aStart)*ringR);
+          ctx.quadraticCurveTo(
+            Math.cos(a)*(ringR+waveH*.5),Math.sin(a)*(ringR+waveH*.5),
+            Math.cos(aEnd)*ringR,Math.sin(aEnd)*ringR
+          );
+          ctx.quadraticCurveTo(
+            Math.cos(a)*(ringR-waveH),Math.sin(a)*(ringR-waveH),
+            Math.cos(aStart)*ringR,Math.sin(aStart)*ringR
+          );
+          ctx.closePath();ctx.globalAlpha=.12;ctx.fill();
+        }
+
+        // Curl detail at wave crest
+        if(ring<5){
+          const curlA=aEnd;
+          const curlR=ringR+waveH*.3;
+          ctx.beginPath();
+          ctx.arc(Math.cos(curlA)*ringR,Math.sin(curlA)*ringR,waveH*.3,
+                  curlA+Math.PI,curlA+Math.PI*.3,true);
+          ctx.globalAlpha=.15;ctx.lineWidth=R*.004;ctx.stroke();
         }
       }
     }
-    // center hexagonal ornament
-    ctx.lineWidth=R*.015;
-    ctx.beginPath();
-    for(let i=0;i<=6;i++){
-      const a=Math.PI*2/6*i;
-      const x2=Math.cos(a)*R*.12,y2=Math.sin(a)*R*.12;
-      if(i===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
-    }
-    ctx.closePath();ctx.globalAlpha=.4;ctx.fill();
-
-  } else if(type==='wave'){
-    // 海水江崖纹 — layered ocean waves with mountain base
-    ctx.lineCap='round';
-    // mountain base arcs (bottom)
-    ctx.lineWidth=R*.025;
-    for(let m=0;m<3;m++){
-      const my=R*.6+m*R*.12;
-      ctx.beginPath();
-      ctx.moveTo(-R*.8,my);
-      ctx.bezierCurveTo(-R*.4,my-R*.15,R*.4,my-R*.15,R*.8,my);
-      ctx.globalAlpha=.3;ctx.stroke();
-    }
-    // wave layers (concentric cresting arcs)
-    const wLayers=6;
-    for(let ly=0;ly<wLayers;ly++){
-      const baseY=-R*.1+ly*R*.16;
-      const wn=4+ly;
-      ctx.lineWidth=R*.015;
-      for(let w2=0;w2<wn;w2++){
-        const wx=-R*.85+w2*(R*1.7/wn)+(ly%2?R*.12:0);
-        const ww=R*.22;
-        // wave crest arc
+    // ── Spray foam dots between rings ──
+    for(let ring=0;ring<rings-1;ring++){
+      const rd=R*(.82-ring*.12);
+      const dotCount=12+ring*2;
+      for(let d=0;d<dotCount;d++){
+        const da=Math.PI*2/dotCount*d+(ring*.3);
+        const jitter=R*.015*(Math.sin(d*3.7+ring*2.1));
         ctx.beginPath();
-        ctx.arc(wx,baseY,ww,Math.PI,0,false);
-        ctx.globalAlpha=.28;ctx.stroke();
-        // curl at crest tip
-        ctx.beginPath();
-        ctx.arc(wx+ww,baseY,ww*.2,Math.PI,Math.PI*.5,true);
-        ctx.globalAlpha=.2;ctx.stroke();
+        ctx.arc(Math.cos(da)*(rd+jitter),Math.sin(da)*(rd+jitter),
+                R*(.005+.002*Math.random()),0,Math.PI*2);
+        ctx.globalAlpha=.12+.04*Math.sin(d);ctx.fill();
       }
     }
-    // spray dots
-    for(let i=0;i<20;i++){
-      const dx=(Math.cos(i*2.4))*R*.6;
-      const dy=-R*.3+Math.abs(Math.sin(i*1.7))*R*.5;
-      ctx.beginPath();ctx.arc(dx,dy,R*.01,0,Math.PI*2);ctx.globalAlpha=.15;ctx.fill();
+    // ── Decorative border ──
+    ctx.globalAlpha=.3;ctx.lineWidth=R*.006;
+    ctx.beginPath();ctx.arc(0,0,R*.92,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=.2;ctx.lineWidth=R*.003;
+    ctx.beginPath();ctx.arc(0,0,R*.95,0,Math.PI*2);ctx.stroke();
+    // ── Center calm eye ──
+    // Concentric ripples
+    for(let c=0;c<3;c++){
+      ctx.beginPath();ctx.arc(0,0,R*(.06+c*.03),0,Math.PI*2);
+      ctx.lineWidth=R*.003;ctx.globalAlpha=.25-.05*c;ctx.stroke();
     }
+    ctx.beginPath();ctx.arc(0,0,R*.04,0,Math.PI*2);ctx.globalAlpha=.4;ctx.fill();
   }
 
   ctx.globalAlpha=1;ctx.restore();
@@ -931,6 +1141,7 @@ function rebuild(){
   const geo=new THREE.LatheGeometry(pts,256);
   const pos=geo.attributes.position,uv=geo.attributes.uv;
 
+  // Pass 1: apply edge deformation
   for(let i=0;i<pos.count;i++){
     let x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
     let rd=Math.sqrt(x*x+z*z);
@@ -943,16 +1154,24 @@ function rebuild(){
       const sc=(rd+wave*w)/rd;
       pos.setX(i,x*sc);pos.setZ(i,z*sc);
     }
+  }
+  // Compute normals after deformation so we can use them for UV classification
+  geo.computeVertexNormals();
 
-    // UV: top face → orthographic projection; side/bottom → solid color corner
-    if(y>H-.5){
+  // Pass 2: assign UVs based on normal direction
+  const nor=geo.attributes.normal;
+  for(let i=0;i<pos.count;i++){
+    const ny=nor.getY(i);
+    const x=pos.getX(i),z=pos.getZ(i);
+    // Top face: normal points mostly upward (ny > 0.3)
+    if(ny>0.3){
       uv.setXY(i, 0.5 + x/D, 0.5 - z/D);
     } else {
-      // map side faces to top-left corner (pure base color, no pattern)
-      uv.setXY(i, 0.01, 0.01);
+      // Side/bottom: map to a single pure-color pixel
+      uv.setXY(i, 0.002, 0.002);
     }
   }
-  geo.computeVertexNormals();
+  uv.needsUpdate=true;
 
   const hCanvas=generateCanvas(true);
   const cCanvas=generateCanvas(false);

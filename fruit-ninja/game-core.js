@@ -4,8 +4,8 @@
       label: "Survival",
       lives: 5,
       duration: null,
-      bombBase: 0.04,
-      bombGrowth: 0.0006,
+      bombBase: 0.02,
+      bombGrowth: 0.0003,
       missPenalty: 1,
       bombPenalty: 2,
       spawnBase: 1120,
@@ -16,8 +16,8 @@
       label: "Rush",
       lives: 3,
       duration: 60,
-      bombBase: 0.06,
-      bombGrowth: 0.0008,
+      bombBase: 0.03,
+      bombGrowth: 0.0004,
       missPenalty: 0,
       bombPenalty: 1,
       spawnBase: 760,
@@ -86,7 +86,7 @@
   }
 
   function bombChance(mode, difficultyTime) {
-    return Math.min(0.12, mode.bombBase + positiveNumber(difficultyTime) * mode.bombGrowth);
+    return Math.min(0.06, mode.bombBase + positiveNumber(difficultyTime) * mode.bombGrowth);
   }
 
   function smoothPoint(previous, next, alpha) {
@@ -137,8 +137,8 @@
   function cameraConstraints(isMobile) {
     return {
       video: {
-        width: isMobile ? 360 : 640,
-        height: isMobile ? 240 : 360,
+        width: { ideal: isMobile ? 360 : 640 },
+        height: { ideal: isMobile ? 240 : 360 },
         facingMode: "user",
       },
       audio: false,

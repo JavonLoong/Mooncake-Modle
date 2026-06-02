@@ -468,3 +468,52 @@ body.flash-danger #stage-bg {
   color: #85e5f2;
 }
 
+/* Customization Selectors for Blade and Dojo */
+.customization-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto 20px auto;
+}
+
+.custom-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+}
+
+.custom-group label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #99aab5;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.custom-group select {
+  background: rgba(10, 18, 24, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: #f4f7fa;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+
+.custom-group select:hover {
+  border-color: rgba(255, 213, 115, 0.6);
+}
+
+.custom-group select:focus {
+  border-color: rgba(255, 213, 115, 0.88);
+  box-shadow: 0 0 8px rgba(255, 213, 115, 0.25);
+}
+
+
