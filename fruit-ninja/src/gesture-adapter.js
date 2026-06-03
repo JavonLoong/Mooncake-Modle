@@ -121,7 +121,7 @@
   function initCalibrationButton() {
     const calibBtn = document.getElementById('calibrate-button');
     if (calibBtn) {
-      calibBtn.addEventListener('click', startCalibration);
+      calibBtn.addEventListener('click', toggleCalibration);
     } else {
       // Retry in case DOM isn't fully ready
       setTimeout(initCalibrationButton, 200);
@@ -129,23 +129,58 @@
   }
   initCalibrationButton();
 
-  function startCalibration() {
-    if (calibrationActive) return;
-    calibrationActive = true;
-    calibrationStartTime = Date.now();
-    calibMinX = 1.0;
-    calibMaxX = 0.0;
-    calibMinY = 1.0;
-    calibMaxY = 0.0;
-    
-    trackingStatus.textContent = "⏱️ 校准开始：请随意在空中挥手，触碰您的舒适边界！";
-
+  function toggleCalibration() {
     const calibBtn = document.getElementById('calibrate-button');
-    if (calibBtn) {
-      calibBtn.disabled = true;
-      calibBtn.style.background = 'rgba(255, 172, 54, 0.35)';
-      calibBtn.style.borderColor = 'rgba(255, 172, 54, 0.7)';
-      calibBtn.textContent = "⏱️ 校准中，挥动手指 6s...";
+    if (!calibrationActive) {
+      // Start calibration mode
+      calibrationActive = true;
+      calibMinX = 1.0;
+      calibMaxX = 0.0;
+      calibMinY = 1.0;
+      calibMaxY = 0.0;
+      
+      trackingStatus.textContent = "⚙️ 校准模式已开启：请在空中随意挥手，覆盖您的上下左右舒适边界。";
+      
+      if (calibBtn) {
+        calibBtn.style.background = 'rgba(255, 120, 0, 0.55)';
+        calibBtn.style.borderColor = '#ff7800';
+        calibBtn.textContent = "💾 确认校准并保存";
+        calibBtn.classList.add('calibrating-pulse');
+      }
+    } else {
+      // Finish calibration mode
+      calibrationActive = false;
+      const w = calibMaxX - calibMinX;
+      const h = calibMaxY - calibMinY;
+
+      if (calibBtn) {
+        calibBtn.classList.remove('calibrating-pulse');
+      }
+
+      if (w > 0.12 && h > 0.12) {
+        // Comfort padding margins (3%)
+        const padX = w * 0.03;
+        const padY = h * 0.03;
+
+        bounds.minX = Math.max(0.01, calibMinX + padX);
+        bounds.maxX = Math.min(0.99, calibMaxX - padX);
+        bounds.minY = Math.max(0.01, calibMinY + padY);
+        bounds.maxY = Math.min(0.99, calibMaxY - padY);
+
+        try {
+          localStorage.setItem('ninja_calib_bounds', JSON.stringify(bounds));
+        } catch (e) {}
+
+        trackingStatus.textContent = "🎉 校准成功！已保存个人专属体感范围。";
+      } else {
+        trackingStatus.textContent = "❌ 校准未保存：手势挥舞范围不足。";
+      }
+
+      if (calibBtn) {
+        calibBtn.style.background = 'rgba(133, 229, 242, 0.22)';
+        calibBtn.style.borderColor = 'rgba(133, 229, 242, 0.45)';
+        calibBtn.textContent = "⚙️ 重新校准舒适范围";
+      }
     }
   }
 
@@ -273,78 +308,51 @@
       const rawX = 1 - tip.x; // Mirror X coordinates
       const rawY = tip.y;
 
-      // Apply Exponential Smoothing
-      if (smoothedX === null) {
-        smoothedX = rawX;
-        smoothedY = rawY;
-      } else {
-        smoothedX = smoothedX + alpha * (rawX - smoothedX);
-        smoothedY = smoothedY + alpha * (rawY - smoothedY);
-      }
+      // Apply      let mappedX, mappedY;
 
-      // If Calibration is Active, record ranges
+      // If Calibration is Active, record ranges and draw active box
       if (calibrationActive) {
-        const elapsed = (Date.now() - calibrationStartTime) / 1000;
-        if (elapsed < 6.0) {
-          calibMinX = Math.min(calibMinX, smoothedX);
-          calibMaxX = Math.max(calibMaxX, smoothedX);
-          calibMinY = Math.min(calibMinY, smoothedY);
-          calibMaxY = Math.max(calibMaxY, smoothedY);
+        calibMinX = Math.min(calibMinX, smoothedX);
+        calibMaxX = Math.max(calibMaxX, smoothedX);
+        calibMinY = Math.min(calibMinY, smoothedY);
+        calibMaxY = Math.max(calibMaxY, smoothedY);
 
-          // Draw the dynamically expanding calibration box in orange
-          ctx.strokeStyle = 'rgba(255, 172, 54, 0.75)';
-          ctx.lineWidth = 3;
-          ctx.setLineDash([6, 3]);
-          ctx.strokeRect(
-            calibMinX * handCanvas.width,
-            calibMinY * handCanvas.height,
-            (calibMaxX - calibMinX) * handCanvas.width,
-            (calibMaxY - calibMinY) * handCanvas.height
-          );
-          ctx.setLineDash([]);
-          trackingStatus.textContent = "校准中：剩余 " + Math.ceil(6 - elapsed) + " 秒...";
-        } else {
-          // Calibration complete
-          calibrationActive = false;
-          const w = calibMaxX - calibMinX;
-          const h = calibMaxY - calibMinY;
+        // Draw the dynamically expanding calibration box in orange
+        ctx.strokeStyle = 'rgba(255, 172, 54, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 3]);
+        ctx.strokeRect(
+          calibMinX * handCanvas.width,
+          calibMinY * handCanvas.height,
+          (calibMaxX - calibMinX) * handCanvas.width,
+          (calibMaxY - calibMinY) * handCanvas.height
+        );
+        ctx.setLineDash([]);
 
-          if (w > 0.15 && h > 0.15) {
-            // Apply slight margin padding for comfortable gameplay edge reaches
-            bounds.minX = Math.max(0.02, calibMinX + w * 0.05);
-            bounds.maxX = Math.min(0.98, calibMaxX - w * 0.05);
-            bounds.minY = Math.max(0.02, calibMinY + h * 0.05);
-            bounds.maxY = Math.min(0.98, calibMaxY - h * 0.05);
+        // Map using running bounds
+        const rX = calibMaxX - calibMinX;
+        const rY = calibMaxY - calibMinY;
+        mappedX = rX > 0.05 ? (smoothedX - calibMinX) / rX : smoothedX;
+        mappedY = rY > 0.05 ? (smoothedY - calibMinY) / rY : smoothedY;
+      } else {
+        // Draw active Comfort Zone Box (Cyan dashed)
+        ctx.strokeStyle = 'rgba(133, 229, 242, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(
+          bounds.minX * handCanvas.width,
+          bounds.minY * handCanvas.height,
+          (bounds.maxX - bounds.minX) * handCanvas.width,
+          (bounds.maxY - bounds.minY) * handCanvas.height
+        );
+        ctx.setLineDash([]); // reset
 
-            try {
-              localStorage.setItem('ninja_calib_bounds', JSON.stringify(bounds));
-            } catch(e) {}
-            trackingStatus.textContent = "🎯 校准成功！已保存个人范围。";
-          } else {
-            trackingStatus.textContent = "❌ 校准失败，挥手幅度太小！";
-          }
-
-          const calibBtn = document.getElementById('calibrate-button');
-          if (calibBtn) {
-            calibBtn.disabled = false;
-            calibBtn.style.background = 'rgba(133, 229, 242, 0.22)';
-            calibBtn.style.borderColor = 'rgba(133, 229, 242, 0.45)';
-            calibBtn.textContent = "⚙️ 重新校准舒适范围 (6秒)";
-          }
-        }
+        // Map using stored bounds
+        const rX = bounds.maxX - bounds.minX;
+        const rY = bounds.maxY - bounds.minY;
+        mappedX = (smoothedX - bounds.minX) / (rX || 1);
+        mappedY = (smoothedY - bounds.minY) / (rY || 1);
       }
-
-      // Draw active Comfort Zone Box (Cyan dashed)
-      ctx.strokeStyle = 'rgba(133, 229, 242, 0.45)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 4]);
-      ctx.strokeRect(
-        bounds.minX * handCanvas.width,
-        bounds.minY * handCanvas.height,
-        (bounds.maxX - bounds.minX) * handCanvas.width,
-        (bounds.maxY - bounds.minY) * handCanvas.height
-      );
-      ctx.setLineDash([]); // reset
 
       // Draw Hand Connections
       ctx.strokeStyle = 'rgba(133, 229, 242, 0.8)';
@@ -366,22 +374,11 @@
         ctx.fill();
       });
 
-      if (!calibrationActive) {
-        trackingStatus.textContent = "🎯 手势锁定成功";
-      }
-
       // Forward inputs to window.game for sub-step 500Hz interpolation
       if (window.game) {
-        // Map camera coordinates with dynamically calibrated bounds to full game window
-        const rangeX = bounds.maxX - bounds.minX;
-        const rangeY = bounds.maxY - bounds.minY;
-
-        const mappedX = (smoothedX - bounds.minX) / (rangeX || 1);
-        const mappedY = (smoothedY - bounds.minY) / (rangeY || 1);
-        
         // Clamp to [0, 1] bounds
         const clampedX = Math.max(0, Math.min(1, mappedX));
-        const clampedY = Math.max(0, Math.min(1, clampedY));
+        const clampedY = Math.max(0, Math.min(1, mappedY));
 
         const gameX = clampedX * window.game.width;
         const gameY = clampedY * window.game.height;

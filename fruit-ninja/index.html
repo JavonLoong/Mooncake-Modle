@@ -72,6 +72,15 @@
       background: rgba(255, 0, 0, 0.6);
       transition: none;
     }
+    
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 120, 0, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 120, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 120, 0, 0); }
+    }
+    .calibrating-pulse {
+      animation: pulse 1.5s infinite !important;
+    }
   </style>
 </head>
 <body>
