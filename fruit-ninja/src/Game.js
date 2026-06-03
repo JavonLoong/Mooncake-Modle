@@ -730,6 +730,7 @@ Game.prototype = {
   },
 
   addTrail: function(x1, y1, x2, y2) {
+    if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
     var dx = x2 - x1;
     var dy = y2 - y1;
     var speed = Math.hypot(dx, dy);
@@ -780,13 +781,15 @@ Game.prototype = {
     if (window.calibrationActive) return;
     var self = this;
     var offX, offY;
-    if (!event.offsetX) {
+    if (event.offsetX === undefined) {
       offX = event.clientX - $(event.target).position().left;
       offY = event.clientY - $(event.target).position().top;
     } else {
       offX = event.offsetX;
       offY = event.offsetY;
     }
+
+    if (isNaN(offX) || isNaN(offY)) return;
 
     if (this._mouseDown) {
       // Draw trail
@@ -924,7 +927,7 @@ Game.prototype = {
     this._mouseDown = true;
     event.preventDefault();
     var offX, offY;
-    if (!event.offsetX) {
+    if (event.offsetX === undefined) {
       offX = event.clientX - $(event.target).position().left;
       offY = event.clientY - $(event.target).position().top;
     } else {

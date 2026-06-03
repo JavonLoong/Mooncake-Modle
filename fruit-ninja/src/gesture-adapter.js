@@ -107,8 +107,8 @@
   let calibMaxY = 0.0;
 
   // Grid Calibration Parameters
-  const gridRows = 9;
-  const gridCols = 12;
+  const gridRows = 18;
+  const gridCols = 24;
   let visitedGrid = null;
   let calibRect = null;
 
@@ -382,7 +382,7 @@
             for (let r = calibRect.minRow; r <= calibRect.maxRow; r++) {
               if (visitedGrid[r][c]) count++;
             }
-            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.5);
+            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.4);
             if (count >= needed) {
               calibRect.minCol--;
               expanded = true;
@@ -396,7 +396,7 @@
             for (let r = calibRect.minRow; r <= calibRect.maxRow; r++) {
               if (visitedGrid[r][c]) count++;
             }
-            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.5);
+            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.4);
             if (count >= needed) {
               calibRect.maxCol++;
               expanded = true;
@@ -410,7 +410,7 @@
             for (let c = calibRect.minCol; c <= calibRect.maxCol; c++) {
               if (visitedGrid[r][c]) count++;
             }
-            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.5);
+            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.4);
             if (count >= needed) {
               calibRect.minRow--;
               expanded = true;
@@ -424,7 +424,7 @@
             for (let c = calibRect.minCol; c <= calibRect.maxCol; c++) {
               if (visitedGrid[r][c]) count++;
             }
-            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.5);
+            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.4);
             if (count >= needed) {
               calibRect.maxRow++;
               expanded = true;
