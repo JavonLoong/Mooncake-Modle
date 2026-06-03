@@ -308,7 +308,16 @@
       const rawX = 1 - tip.x; // Mirror X coordinates
       const rawY = tip.y;
 
-      // Apply      let mappedX, mappedY;
+      // Apply Exponential Smoothing
+      if (smoothedX === null) {
+        smoothedX = rawX;
+        smoothedY = rawY;
+      } else {
+        smoothedX = smoothedX + alpha * (rawX - smoothedX);
+        smoothedY = smoothedY + alpha * (rawY - smoothedY);
+      }
+
+      let mappedX, mappedY;
 
       // If Calibration is Active, record ranges and draw active box
       if (calibrationActive) {
