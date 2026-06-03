@@ -560,6 +560,12 @@ Game.prototype = {
   _update: function() {
     var self = this;
 
+    if (window.calibrationActive) {
+      this.gestureActive = false;
+      this._mouseDown = false;
+      return;
+    }
+
     // Sub-stepping interpolation for gesture hands (simulating 500Hz/high frame rate input)
     if (this.gestureActive && this.targetGestureX !== undefined && this.targetGestureY !== undefined) {
       if (this.currentGestureX === undefined || this.currentGestureX === null) {
@@ -766,10 +772,12 @@ Game.prototype = {
   },
 
   onDocumentMouseUp: function(event) {
+    if (window.calibrationActive) return;
     this._mouseDown = false;
   },
 
   onDocumentMouseMove: function(event) {
+    if (window.calibrationActive) return;
     var self = this;
     var offX, offY;
     if (!event.offsetX) {
@@ -912,6 +920,7 @@ Game.prototype = {
   },
 
   onDocumentMouseDown: function(event) {
+    if (window.calibrationActive) return;
     this._mouseDown = true;
     event.preventDefault();
     var offX, offY;

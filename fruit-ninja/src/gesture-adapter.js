@@ -99,7 +99,7 @@
   };
 
   // Calibration state variables
-  let calibrationActive = false;
+  window.calibrationActive = false;
   let calibrationStartTime = 0;
   let calibMinX = 1.0;
   let calibMaxX = 0.0;
@@ -131,8 +131,19 @@
   initCalibrationButtons();
 
   function enterCalibration() {
-    if (calibrationActive) return;
-    calibrationActive = true;
+    if (window.calibrationActive) return;
+    window.calibrationActive = true;
+
+    // Explicitly release any active game input state
+    if (window.game) {
+      window.game.gestureActive = false;
+      window.game._mouseDown = false;
+      try {
+        window.game.onDocumentMouseUp({});
+      } catch (e) {}
+    }
+    inputActive = false;
+
     calibMinX = 1.0;
     calibMaxX = 0.0;
     calibMinY = 1.0;
@@ -153,8 +164,8 @@
   }
 
   function exitCalibration() {
-    if (!calibrationActive) return;
-    calibrationActive = false;
+    if (!window.calibrationActive) return;
+    window.calibrationActive = false;
 
     // Hide calibration overlay
     const overlay = document.getElementById('calibration-overlay');
@@ -333,7 +344,7 @@
       let mappedX, mappedY;
 
       // If Calibration is Active, record ranges and draw active box
-      if (calibrationActive) {
+      if (window.calibrationActive) {
         calibMinX = Math.min(calibMinX, smoothedX);
         calibMaxX = Math.max(calibMaxX, smoothedX);
         calibMinY = Math.min(calibMinY, smoothedY);
@@ -396,12 +407,12 @@
         ctx.fill();
       });
 
-      if (!calibrationActive) {
+      if (!window.calibrationActive) {
         trackingStatus.textContent = "🎯 手势锁定成功";
       }
 
       // Forward inputs to window.game for sub-step 500Hz interpolation
-      if (window.game && !calibrationActive) {
+      if (window.game && !window.calibrationActive) {
         // Clamp to [0, 1] bounds
         const clampedX = Math.max(0, Math.min(1, mappedX));
         const clampedY = Math.max(0, Math.min(1, mappedY));
