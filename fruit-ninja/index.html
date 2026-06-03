@@ -1,146 +1,30 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
+  <title>Fruit Ninja WebGL - 体感手势版</title>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-store">
-  <title>手势斩击道场 - Hand Slice Dojo</title>
-  <meta name="description" content="一个基于网络摄像头的体感手势切水果街机原型游戏。">
-  <link rel="stylesheet" href="styles.css">
+  <script type="text/javascript" src="./lib/jquery-1.7.2.min.js"></script>
+  <script type="text/javascript" src="./lib/Three.js"></script>
+  <script type="text/javascript" src="./lib/Detector.js"></script>
+  <script type="text/javascript" src="./lib/Stats.js"></script>
+  <script type="text/javascript" src="./lib/state-machine.min.js"></script>
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <div id="game-container">
-    <div id="stage-bg" aria-hidden="true"></div>
-    <canvas id="game-canvas"></canvas>
-    <canvas id="fx-canvas"></canvas>
-
-    <section id="hud" aria-label="游戏状态">
-      <div class="hud-item">
-        <span class="hud-label">得分</span>
-        <strong id="score">0</strong>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">连击</span>
-        <strong id="combo">x1</strong>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">生命值</span>
-        <strong id="lives">5</strong>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">剩余时间</span>
-        <strong id="time-left">∞</strong>
-      </div>
-      <div class="hud-item">
-        <span class="hud-label">最高纪录</span>
-        <strong id="best-score">0</strong>
-      </div>
-      <div class="hud-actions">
-        <button id="pause-button" class="icon-button" type="button" aria-label="暂停游戏">Ⅱ</button>
-        <button id="mute-button" class="icon-button" type="button" aria-label="静音">♪</button>
-      </div>
-    </section>
-
-    <aside id="camera-panel" aria-label="摄像头预览">
-      <video id="video" playsinline muted></video>
-      <canvas id="hand-canvas"></canvas>
-      <div id="tracking-status">正在启动摄像头...</div>
-    </aside>
-
-    <div id="start-screen" class="overlay">
-      <div class="overlay-inner">
-        <p class="eyebrow">摄像头体感街机</p>
-        <h1>手势斩击道场</h1>
-        
-        <!-- 中文手势引导指南 -->
-        <div class="tutorial-card">
-          <h3>💡 体感操作指南 (How to Play)</h3>
-          <ul>
-            <li><strong>合理站位：</strong>距离摄像头约 <strong>0.8 - 1.5 米</strong>。在左下角预览窗中能看到完整的手掌和手臂。</li>
-            <li><strong>手势识别：</strong>面对相机<strong>伸出单手食指</strong>（如图 ☝️）。AI 锁定后，会在指尖生成一个<strong>黄色发光点</strong>，手部会套上绿色的追踪网格。</li>
-            <li><strong>识别小窍门：</strong>将<strong>手掌面朝摄像头</strong>最容易被锁定。若侧着手（呈手枪 🔫 姿势）或离镜头太近，可能会因为视野残缺或视角偏斜导致识别失效。</li>
-            <li><strong>挥砍水果：</strong>在空中**快速划动食指**。指尖划过的轨迹即为“刀光”，用来切开抛出的水果。</li>
-            <li><strong>避开炸弹：</strong>切到炸弹会扣除生命值。</li>
-            <li><strong>备用控制：</strong>如无摄像头或识别失败，可直接用<strong>鼠标在屏幕上拖动</strong>进行切水果。</li>
-          </ul>
-        </div>
-
-        <div id="mode-select" aria-label="游戏模式">
-          <button class="mode-button active" data-mode="survival" type="button">
-            <strong>经典生存</strong>
-            <span>有限生命、有炸弹、难度随时间增加</span>
-          </button>
-          <button class="mode-button" data-mode="rush" type="button">
-            <strong>限时狂热</strong>
-            <span>60 秒限制、水果波次极其密集</span>
-          </button>
-          <button class="mode-button" data-mode="focus" type="button">
-            <strong>禅宗专注</strong>
-            <span>90 秒限制、无炸弹、纯享舒适切割</span>
-          </button>
-        </div>
-
-        <!-- 🗡️ 刀刃与道场个性化选择 (Replicated from Mobile App) -->
-        <div class="customization-container">
-          <div class="custom-group">
-            <label for="blade-select">🗡️ 刀光特效 (Blade Style)</label>
-            <select id="blade-select">
-              <option value="classic">经典金黄 (Classic Gold)</option>
-              <option value="flame">烈焰赤红 (Flame Crimson)</option>
-              <option value="ice">寒冰碧蓝 (Frost Azure)</option>
-              <option value="rainbow">幻彩霓虹 (Rainbow Neon)</option>
-              <option value="shadow">暗影黑紫 (Shadow Purple)</option>
-            </select>
-          </div>
-          <div class="custom-group">
-            <label for="dojo-select">🏮 背景场景 (Dojo Theme)</label>
-            <select id="dojo-select">
-              <option value="classic">经典木墙 (Classic Dojo)</option>
-              <option value="sakura">樱花道场 (Sakura Pink)</option>
-              <option value="cyber">赛博霓虹 (Cyber Grid)</option>
-            </select>
-          </div>
-        </div>
-        
-        <button id="start-button">开始游戏</button>
-      </div>
-    </div>
-
-    <div id="game-over" class="overlay">
-      <div class="overlay-inner">
-        <p class="eyebrow">挑战结束</p>
-        <h1>游戏结束</h1>
-        <p class="lede">最终得分: <strong id="final-score">0</strong></p>
-        <p class="rank-line">获得的段位: <strong id="final-rank">懵懂菜鸟</strong></p>
-        <p class="next-rank" id="next-rank">距离下一段位还需 25 分</p>
-        <button id="restart-button">再来一局</button>
-      </div>
-    </div>
-
-    <div id="countdown-overlay" aria-live="polite">
-      <span id="countdown-label">3</span>
-    </div>
-
-    <div id="pause-overlay" class="overlay compact-overlay">
-      <div class="overlay-inner">
-        <p class="eyebrow">游戏暂停</p>
-        <h1>准备好了吗？</h1>
-        <button id="resume-button">继续游戏</button>
-      </div>
-    </div>
-
-    <div id="loading" class="overlay">
-      <div class="overlay-inner">
-        <p class="eyebrow">系统初始化中</p>
-        <h1>摄像头与模型设置</h1>
-        <p class="lede" id="loading-message">正在加载 AI 手势追踪模型，请稍候...</p>
-      </div>
-    </div>
+  <div id="container"></div>
+  <div id="paused">
+    <!--<img src="./images/play_button.png" alt="play" />-->
+    <!--<img src="./images/retry_button.png" alt="retry" />-->
   </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="game-core.js?v=20260602-hand-map"></script>
-  <script src="game.js?v=20260602-hand-map"></script>
+  <script type="text/javascript" src="./src/ThreePreloader.js"></script>
+  <script type="text/javascript" src="./src/Fruit.js"></script>
+  <script type="text/javascript" src="./src/JuiceParticleSystem.js"></script>
+  <script type="text/javascript" src="./src/UIManager.js"></script>
+  <script type="text/javascript" src="./src/LayeredCanvas.js"></script>
+  <script type="text/javascript" src="./src/CanvasNumber.js"></script>
+  <script type="text/javascript" src="./src/Game.js"></script>
+  <script type="text/javascript" src="./src/main.js"></script>
+  <script type="text/javascript" src="./src/gesture-adapter.js"></script>
 </body>
 </html>

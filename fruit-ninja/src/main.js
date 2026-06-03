@@ -31,6 +31,7 @@ $(document).ready(function() {
       loader: loader
     };
     var game = new Game(opts);
+    window.game = game;
     game.initScene();
     game.renderLoop();
   }
