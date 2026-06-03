@@ -106,6 +106,12 @@
   let calibMinY = 1.0;
   let calibMaxY = 0.0;
 
+  // Grid Calibration Parameters
+  const gridRows = 9;
+  const gridCols = 12;
+  let visitedGrid = null;
+  let calibRect = null;
+
   // Load custom bounds if they exist in localStorage
   try {
     const savedBounds = localStorage.getItem('ninja_calib_bounds');
@@ -143,6 +149,10 @@
       } catch (e) {}
     }
     inputActive = false;
+
+    // Initialize/Reset grid calibration states
+    visitedGrid = Array(gridRows).fill().map(() => Array(gridCols).fill(false));
+    calibRect = null;
 
     calibMinX = 1.0;
     calibMaxX = 0.0;
@@ -345,22 +355,127 @@
 
       // If Calibration is Active, record ranges and draw active box
       if (window.calibrationActive) {
-        calibMinX = Math.min(calibMinX, smoothedX);
-        calibMaxX = Math.max(calibMaxX, smoothedX);
-        calibMinY = Math.min(calibMinY, smoothedY);
-        calibMaxY = Math.max(calibMaxY, smoothedY);
+        if (!visitedGrid) {
+          visitedGrid = Array(gridRows).fill().map(() => Array(gridCols).fill(false));
+        }
 
-        // Draw the dynamically expanding calibration box in orange
-        ctx.strokeStyle = 'rgba(255, 172, 54, 0.8)';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 3]);
+        let col = Math.floor(smoothedX * gridCols);
+        let row = Math.floor(smoothedY * gridRows);
+        col = Math.max(0, Math.min(gridCols - 1, col));
+        row = Math.max(0, Math.min(gridRows - 1, row));
+
+        visitedGrid[row][col] = true;
+
+        if (!calibRect) {
+          calibRect = { minRow: row, maxRow: row, minCol: col, maxCol: col };
+        }
+
+        // Expansion logic loop (only expand if user can reach the boundary cells)
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+
+          // Try expanding Left
+          if (calibRect.minCol > 0) {
+            let count = 0;
+            const c = calibRect.minCol - 1;
+            for (let r = calibRect.minRow; r <= calibRect.maxRow; r++) {
+              if (visitedGrid[r][c]) count++;
+            }
+            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.5);
+            if (count >= needed) {
+              calibRect.minCol--;
+              expanded = true;
+            }
+          }
+
+          // Try expanding Right
+          if (calibRect.maxCol < gridCols - 1) {
+            let count = 0;
+            const c = calibRect.maxCol + 1;
+            for (let r = calibRect.minRow; r <= calibRect.maxRow; r++) {
+              if (visitedGrid[r][c]) count++;
+            }
+            const needed = Math.ceil((calibRect.maxRow - calibRect.minRow + 1) * 0.5);
+            if (count >= needed) {
+              calibRect.maxCol++;
+              expanded = true;
+            }
+          }
+
+          // Try expanding Up
+          if (calibRect.minRow > 0) {
+            let count = 0;
+            const r = calibRect.minRow - 1;
+            for (let c = calibRect.minCol; c <= calibRect.maxCol; c++) {
+              if (visitedGrid[r][c]) count++;
+            }
+            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.5);
+            if (count >= needed) {
+              calibRect.minRow--;
+              expanded = true;
+            }
+          }
+
+          // Try expanding Down
+          if (calibRect.maxRow < gridRows - 1) {
+            let count = 0;
+            const r = calibRect.maxRow + 1;
+            for (let c = calibRect.minCol; c <= calibRect.maxCol; c++) {
+              if (visitedGrid[r][c]) count++;
+            }
+            const needed = Math.ceil((calibRect.maxCol - calibRect.minCol + 1) * 0.5);
+            if (count >= needed) {
+              calibRect.maxRow++;
+              expanded = true;
+            }
+          }
+        }
+
+        calibMinX = calibRect.minCol / gridCols;
+        calibMaxX = (calibRect.maxCol + 1) / gridCols;
+        calibMinY = calibRect.minRow / gridRows;
+        calibMaxY = (calibRect.maxRow + 1) / gridRows;
+
+        // Draw grid cell feedback
+        const cellWidth = handCanvas.width / gridCols;
+        const cellHeight = handCanvas.height / gridRows;
+
+        // 1. Draw visited cells with soft cyan glow
+        for (let r = 0; r < gridRows; r++) {
+          for (let c = 0; c < gridCols; c++) {
+            if (visitedGrid[r][c]) {
+              ctx.fillStyle = 'rgba(0, 255, 200, 0.15)';
+              ctx.fillRect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+            }
+          }
+        }
+
+        // 2. Draw grid lines subtly
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < gridCols; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * cellWidth, 0);
+          ctx.lineTo(i * cellWidth, handCanvas.height);
+          ctx.stroke();
+        }
+        for (let j = 1; j < gridRows; j++) {
+          ctx.beginPath();
+          ctx.moveTo(0, j * cellHeight);
+          ctx.lineTo(handCanvas.width, j * cellHeight);
+          ctx.stroke();
+        }
+
+        // 3. Draw current bounding box in orange
+        ctx.strokeStyle = 'rgba(255, 172, 54, 0.9)';
+        ctx.lineWidth = 3.5;
         ctx.strokeRect(
-          calibMinX * handCanvas.width,
-          calibMinY * handCanvas.height,
-          (calibMaxX - calibMinX) * handCanvas.width,
-          (calibMaxY - calibMinY) * handCanvas.height
+          calibRect.minCol * cellWidth,
+          calibRect.minRow * cellHeight,
+          (calibRect.maxCol - calibRect.minCol + 1) * cellWidth,
+          (calibRect.maxRow - calibRect.minRow + 1) * cellHeight
         );
-        ctx.setLineDash([]);
 
         // Map using running bounds
         const rX = calibMaxX - calibMinX;
