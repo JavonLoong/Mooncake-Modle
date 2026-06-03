@@ -72,6 +72,8 @@ $(document).ready(function() {
       // textures for 2d canvas
       bg1: 'images/bg_i_heart_sensei_1280_960.jpg',
       bg2: 'images/bg_store_1280_960.jpg',
+      bg_sakura: 'sakura_dojo.png',
+      bg_cyber: 'cyber_dojo.png',
       gameRing: 'images/ring/ring_start.png',
       aboutRing: 'images/ring/ring_about.png',
       swagRing: 'images/ring/ring_senseis_swag.png',

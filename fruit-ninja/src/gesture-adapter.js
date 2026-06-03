@@ -87,7 +87,7 @@
   // Tracking state variables
   let smoothedX = null;
   let smoothedY = null;
-  const alpha = 0.45; // Smoothing factor (higher = faster response, lower = smoother)
+  const alpha = 0.68; // Smoothing factor (higher = faster response, lower = smoother)
   let inputActive = false;
 
   // 3. Load MediaPipe Hands script dynamically
@@ -107,8 +107,8 @@
     hands.setOptions({
       maxNumHands: 1,
       modelComplexity: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
+      minDetectionConfidence: 0.4,
+      minTrackingConfidence: 0.4
     });
 
     hands.onResults(onHandResults);
@@ -128,11 +128,60 @@
       await videoElement.play();
       trackingStatus.textContent = "👋 等待手势...";
 
+      // Offscreen canvas for active lighting boost and auto-exposure
+      const offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = 320;
+      offscreenCanvas.height = 240;
+      const offscreenCtx = offscreenCanvas.getContext('2d');
+
       // Frame sending loop
       const sendFrame = async () => {
         if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
           try {
-            await hands.send({ image: videoElement });
+            // Draw video to offscreen canvas
+            offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
+            
+            // Fast brightness analysis
+            const imgData = offscreenCtx.getImageData(0, 0, 320, 240);
+            const data = imgData.data;
+            let sum = 0;
+            let count = 0;
+            const step = 8; // sample every 8th pixel
+            for (let i = 0; i < data.length; i += 4 * step) {
+              const r = data[i];
+              const g = data[i+1];
+              const b = data[i+2];
+              const luma = (r * 299 + g * 587 + b * 114) / 1000;
+              sum += luma;
+              count++;
+            }
+            const avgBrightness = sum / count;
+
+            // Apply dynamic visual booster filter based on ambient light
+            let brightness = 1.0;
+            let contrast = 1.0;
+            
+            if (avgBrightness < 55) {
+              // Dark room
+              brightness = 1.9;
+              contrast = 1.45;
+            } else if (avgBrightness < 95) {
+              // Backlit / Silhouette
+              brightness = 1.55;
+              contrast = 1.3;
+            } else if (avgBrightness > 185) {
+              // Overexposed
+              brightness = 0.85;
+              contrast = 1.1;
+            }
+
+            // Redraw with image filters applied
+            offscreenCtx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(1.25)`;
+            offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
+            offscreenCtx.filter = 'none'; // reset
+
+            // Feed the enhanced offscreen canvas to MediaPipe Hands
+            await hands.send({ image: offscreenCanvas });
           } catch (e) {
             console.error("Frame send error:", e);
           }
@@ -190,30 +239,35 @@
 
       trackingStatus.textContent = "🎯 手势锁定成功";
 
-      // Forward inputs to window.game
+      // Forward inputs to window.game for sub-step 500Hz interpolation
       if (window.game) {
-        // Map normalized coordinates [0..1] to WebGL viewport size
         const gameX = smoothedX * window.game.width;
         const gameY = smoothedY * window.game.height;
 
-        const mockEvent = {
-          offsetX: gameX,
-          offsetY: gameY,
-          preventDefault: () => {}
-        };
-
         if (!inputActive) {
+          window.game.gestureActive = true;
+          window.game.targetGestureX = gameX;
+          window.game.targetGestureY = gameY;
+          window.game.currentGestureX = gameX;
+          window.game.currentGestureY = gameY;
+          
           window.game._mouseDown = true;
-          window.game.onDocumentMouseDown(mockEvent);
+          window.game.onDocumentMouseDown({
+            offsetX: gameX,
+            offsetY: gameY,
+            preventDefault: () => {}
+          });
           inputActive = true;
         } else {
-          window.game.onDocumentMouseMove(mockEvent);
+          window.game.targetGestureX = gameX;
+          window.game.targetGestureY = gameY;
         }
       }
 
     } else {
       // Hand lost: trigger mouseup once
       if (inputActive && window.game) {
+        window.game.gestureActive = false;
         window.game._mouseDown = false;
         window.game.onDocumentMouseUp({});
         inputActive = false;

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <title>Fruit Ninja WebGL - 体感手势版</title>
+  <title>水果忍者 3D - AI 体感手势珍藏版</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script type="text/javascript" src="./lib/jquery-1.7.2.min.js"></script>
@@ -9,14 +9,194 @@
   <script type="text/javascript" src="./lib/Detector.js"></script>
   <script type="text/javascript" src="./lib/Stats.js"></script>
   <script type="text/javascript" src="./lib/state-machine.min.js"></script>
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* Align the 3D WebGL container and HTML UI */
+    #container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      overflow: hidden;
+    }
+    
+    /* Ensure overlays sit on top of Three.js canvas (z-index 11) */
+    .overlay {
+      z-index: 100 !important;
+    }
+    #countdown-overlay {
+      z-index: 110 !important;
+    }
+    #hud {
+      z-index: 120 !important;
+    }
+    #camera-preview {
+      z-index: 130 !important;
+    }
+    
+    /* Floating Customization Panel on the Left */
+    #start-card {
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      bottom: 20px;
+      width: 380px;
+      max-width: 90vw;
+      margin: 0;
+      z-index: 100;
+      padding: 28px;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(12, 22, 28, 0.82), rgba(6, 12, 16, 0.9));
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 32px 90px rgba(0,0,0,0.5);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      overflow-y: auto;
+    }
+    
+    /* Custom style to flash the screen red when hitting a bomb */
+    #bomb-flash {
+      position: absolute;
+      inset: 0;
+      z-index: 105;
+      background: rgba(255, 0, 0, 0);
+      pointer-events: none;
+      transition: background 0.05s ease-out;
+    }
+    #bomb-flash.active {
+      background: rgba(255, 0, 0, 0.6);
+      transition: none;
+    }
+  </style>
 </head>
 <body>
+  <!-- Flash screen overlay -->
+  <div id="bomb-flash"></div>
+
+  <!-- The main container for Three.js WebGL and Background Canvas -->
   <div id="container"></div>
-  <div id="paused">
-    <!--<img src="./images/play_button.png" alt="play" />-->
-    <!--<img src="./images/retry_button.png" alt="retry" />-->
+
+  <!-- HUD Overlay -->
+  <div id="hud" style="display: none;">
+    <div class="hud-item">
+      <span class="hud-label">模式</span>
+      <strong id="hud-mode-display">经典体感</strong>
+    </div>
+    <div class="hud-item">
+      <span class="hud-label">得分</span>
+      <strong id="hud-score">0</strong>
+    </div>
+    <div class="hud-item">
+      <span class="hud-label">最高得分</span>
+      <strong id="hud-best-score">0</strong>
+    </div>
+    <div class="hud-item" id="hud-timer-item">
+      <span class="hud-label">剩余时间</span>
+      <strong id="hud-timer">-</strong>
+    </div>
+    <div class="hud-item" id="hud-lives-item">
+      <span class="hud-label">生命</span>
+      <strong id="hud-lives">❤️❤️❤️</strong>
+    </div>
+    <div class="hud-actions">
+      <button id="pause-button" class="icon-button" title="暂停游戏">⏸</button>
+      <button id="mute-button" class="icon-button" title="静音">🔊</button>
+    </div>
   </div>
+
+  <!-- Countdown Overlay -->
+  <div id="countdown-overlay">
+    <div id="countdown-label">3</div>
+  </div>
+
+  <!-- Floating Customization Card (Start Screen) -->
+  <div id="start-card">
+    <div class="eyebrow">Fruit Ninja 3D</div>
+    <h1>体感斩击道场</h1>
+    <p class="lede" style="font-size: 15px; margin-top: 10px;">站在摄像头前，用您的<strong>食指指尖</strong>在空中划动，斩切飞出的 3D 水果！</p>
+    
+    <div id="mode-select" style="margin-top: 18px;">
+      <button class="mode-button active" data-mode="classic">
+        <strong>经典体感 (CLASSIC)</strong>
+        <span>3颗红心生命，水果夹杂炸弹，连击加分</span>
+      </button>
+      <button class="mode-button" data-mode="rush">
+        <strong>疯狂极速 (RUSH)</strong>
+        <span>60秒倒计时，超高水果波次频率，挑战切击极限</span>
+      </button>
+      <button class="mode-button" data-mode="focus">
+        <strong>纯享专注 (FOCUS)</strong>
+        <span>90秒时间限制，无炸弹纯粹切果，考验持久手速</span>
+      </button>
+    </div>
+
+    <div class="customization-container" style="margin-top: 18px;">
+      <div class="custom-group">
+        <label for="dojo-theme">选择道场</label>
+        <select id="dojo-theme">
+          <option value="classic">经典木质道场</option>
+          <option value="sakura">唯美樱花道场</option>
+          <option value="cyber">赛博霓虹网格</option>
+        </select>
+      </div>
+      <div class="custom-group">
+        <label for="blade-style">选择刀光</label>
+        <select id="blade-style">
+          <option value="default">经典流金 (Gold)</option>
+          <option value="flame">烈焰红莲 (Crimson)</option>
+          <option value="ice">极寒冰晶 (Azure)</option>
+          <option value="rainbow">幻彩虹光 (Neon)</option>
+          <option value="shadow">暗影幽冥 (Purple)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="tutorial-card" style="margin-top: 10px; margin-bottom: 10px; padding: 12px 16px;">
+      <h3 style="margin-bottom: 6px;">体感手势操作指南</h3>
+      <ul style="font-size: 12px;">
+        <li style="margin-bottom: 4px;"><strong>准备动作</strong>：请确保摄像头正常启动，并在左下角显示您的影像。</li>
+        <li style="margin-bottom: 4px;"><strong>手势划动</strong>：伸出<strong>单手食指</strong>即可在空中留下游金、红莲、冰蓝等绚丽刀光。</li>
+        <li style="margin-bottom: 4px;"><strong>开始挑战</strong>：在右侧菜单中划动切开 3D Apple（开始游戏）即可进入倒计时。</li>
+      </ul>
+    </div>
+
+    <button id="start-button" style="display: none;">进入道场</button>
+  </div>
+
+  <!-- Pause Overlay -->
+  <div id="paused-overlay" class="overlay compact-overlay" style="display: none;">
+    <div class="overlay-inner">
+      <h2>游戏暂停</h2>
+      <p>手势追踪已挂起</p>
+      <button id="resume-button" style="margin-top: 10px;">继续游戏</button>
+      <br>
+      <button id="restart-button-paused" class="mode-button" style="margin-top: 15px; width: 100%; text-align: center; min-height: auto; padding: 10px;">重新开始</button>
+      <button id="exit-button-paused" class="mode-button" style="margin-top: 8px; width: 100%; text-align: center; min-height: auto; padding: 10px;">退出到主菜单</button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="game-over" class="overlay compact-overlay" style="display: none;">
+    <div class="overlay-inner">
+      <div class="eyebrow" id="game-over-title">游戏结束</div>
+      <h1 id="game-over-score">0</h1>
+      <p class="lede">本次斩击得分</p>
+      
+      <div class="rank-line" id="score-rank">称号：懵懂菜鸟</div>
+      <div class="next-rank" id="best-score-display">历史最高得分：0</div>
+
+      <button id="restart-button">再次挑战</button>
+      <br>
+      <button id="exit-button" class="mode-button" style="margin-top: 15px; width: 100%; text-align: center; min-height: auto; padding: 10px;">返回主菜单</button>
+    </div>
+  </div>
+
+  <!-- Game Scripts -->
   <script type="text/javascript" src="./src/ThreePreloader.js"></script>
   <script type="text/javascript" src="./src/Fruit.js"></script>
   <script type="text/javascript" src="./src/JuiceParticleSystem.js"></script>

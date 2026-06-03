@@ -33,14 +33,14 @@ Fruit.prototype.update = function() {
     this.rotation.addSelf(this.rotationDelta);
     if (this.velocity !== undefined) {
       this.position.addSelf(this.velocity);
-      this.velocity.y -= 9.8 / 30;
+      this.velocity.y -= 4.2 / 30;
     }
   }
   else {
     this.children.forEach(function(fruit) {
       fruit.rotation.addSelf(fruit.rotationDelta);
       fruit.position.addSelf(fruit.velocity);
-      fruit.velocity.y -= 9.8 / 30;
+      fruit.velocity.y -= 4.2 / 30;
     });
   }
 };
@@ -114,4 +114,68 @@ Fruit.prototype.drop = function(sliced, direction) {
                                       Math.random() * 5,
                                       0);
   }
+};
+
+function BombMesh() {
+  THREE.Object3D.call(this);
+  this.kind = 'bomb';
+  this.sliced = false;
+  this.velocity = undefined;
+  this.rotationDelta = new THREE.Vector3(Math.random() * 0.05, Math.random() * 0.05, 0);
+
+  var group = new THREE.Object3D();
+  
+  // Body (dark metallic sphere)
+  var bodyGeo = new THREE.SphereGeometry(45, 16, 16);
+  var bodyMat = new THREE.MeshPhongMaterial({ color: 0x191c20, shininess: 40 });
+  var body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+
+  // Cap (metal cylinder)
+  var capGeo = new THREE.CylinderGeometry(10, 15, 15, 16);
+  var capMat = new THREE.MeshPhongMaterial({ color: 0x60656a, shininess: 40 });
+  var cap = new THREE.Mesh(capGeo, capMat);
+  cap.position.y = 48;
+  group.add(cap);
+
+  // Fuse (torus)
+  var fuseGeo = new THREE.TorusGeometry(18, 3, 8, 16);
+  var fuseMat = new THREE.MeshBasicMaterial({ color: 0xd89f45 });
+  var fuse = new THREE.Mesh(fuseGeo, fuseMat);
+  fuse.position.set(5, 60, 0);
+  fuse.rotation.z = 0.72;
+  group.add(fuse);
+
+  // Spark/Ember (flashing orange sphere)
+  var sparkGeo = new THREE.SphereGeometry(6, 8, 8);
+  var sparkMat = new THREE.MeshBasicMaterial({ color: 0xff7040 });
+  var spark = new THREE.Mesh(sparkGeo, sparkMat);
+  spark.position.set(20, 70, 0);
+  group.add(spark);
+
+  this.add(group);
+  this.position.z = 100;
+  this.name = 'bomb';
+}
+BombMesh.prototype = new THREE.Object3D();
+BombMesh.prototype.constructor = BombMesh;
+
+BombMesh.prototype.update = function() {
+  if (!this.sliced) {
+    this.rotation.addSelf(this.rotationDelta);
+    if (this.velocity !== undefined) {
+      this.position.addSelf(this.velocity);
+      this.velocity.y -= 4.2 / 30; // standard gravity match
+    }
+  }
+};
+
+BombMesh.prototype.reset = function() {
+  this.sliced = false;
+  this.position.set(0, 0, 100);
+  this.velocity = undefined;
+};
+
+BombMesh.prototype.drop = function(sliced, direction) {
+  this.sliced = true;
 };
