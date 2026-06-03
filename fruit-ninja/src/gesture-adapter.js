@@ -223,6 +223,18 @@
         smoothedY = smoothedY + alpha * (rawY - smoothedY);
       }
 
+      // Draw Comfort Zone (Active Play Area) Box
+      ctx.strokeStyle = 'rgba(133, 229, 242, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.strokeRect(
+        0.18 * handCanvas.width,
+        0.15 * handCanvas.height,
+        0.64 * handCanvas.width,
+        0.70 * handCanvas.height
+      );
+      ctx.setLineDash([]); // reset
+
       // Draw Hand Connections
       ctx.strokeStyle = 'rgba(133, 229, 242, 0.8)';
       ctx.lineWidth = 3;
@@ -247,8 +259,16 @@
 
       // Forward inputs to window.game for sub-step 500Hz interpolation
       if (window.game) {
-        const gameX = smoothedX * window.game.width;
-        const gameY = smoothedY * window.game.height;
+        // Map camera coordinates with custom comfort zone [0.18, 0.82] to full game window width
+        const mappedX = (smoothedX - 0.18) / 0.64;
+        const mappedY = (smoothedY - 0.15) / 0.70;
+        
+        // Clamp to [0, 1] bounds
+        const clampedX = Math.max(0, Math.min(1, mappedX));
+        const clampedY = Math.max(0, Math.min(1, clampedY));
+
+        const gameX = clampedX * window.game.width;
+        const gameY = clampedY * window.game.height;
 
         if (!inputActive) {
           window.game.gestureActive = true;
