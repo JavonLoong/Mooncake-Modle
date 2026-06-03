@@ -90,7 +90,23 @@
   const alpha = 0.68; // Smoothing factor (higher = faster response, lower = smoother)
   let inputActive = false;
 
-  // 3. Load MediaPipe Hands script dynamically
+  // 3. Request webcam immediately to bypass CDN loading latency
+  trackingStatus.textContent = "正在启动摄像头...";
+  const streamPromise = navigator.mediaDevices.getUserMedia({
+    video: { width: 640, height: 480, facingMode: "user" },
+    audio: false
+  }).then(async (stream) => {
+    videoElement.srcObject = stream;
+    await videoElement.play();
+    trackingStatus.textContent = "正在加载 AI 手势追踪模型...";
+    return stream;
+  }).catch((err) => {
+    console.error("Camera setup failed:", err);
+    trackingStatus.textContent = "❌ 摄像头启动失败";
+    throw err;
+  });
+
+  // 4. Load MediaPipe Hands script dynamically
   const mpScript = document.createElement('script');
   mpScript.src = "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
   mpScript.onload = () => {
@@ -113,87 +129,77 @@
 
     hands.onResults(onHandResults);
 
-    // Setup Webcam
-    setupWebcam(hands);
+    // Wait for the stream to be ready, then start processing frames
+    streamPromise.then((stream) => {
+      trackingStatus.textContent = "👋 等待手势...";
+      startFrameLoop(hands);
+    }).catch((err) => {
+      // Already logged
+    });
   }
 
-  async function setupWebcam(hands) {
-    try {
-      trackingStatus.textContent = "正在启动摄像头...";
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" },
-        audio: false
-      });
-      videoElement.srcObject = stream;
-      await videoElement.play();
-      trackingStatus.textContent = "👋 等待手势...";
+  function startFrameLoop(hands) {
+    // Offscreen canvas for active lighting boost and auto-exposure
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = 320;
+    offscreenCanvas.height = 240;
+    const offscreenCtx = offscreenCanvas.getContext('2d');
 
-      // Offscreen canvas for active lighting boost and auto-exposure
-      const offscreenCanvas = document.createElement('canvas');
-      offscreenCanvas.width = 320;
-      offscreenCanvas.height = 240;
-      const offscreenCtx = offscreenCanvas.getContext('2d');
-
-      // Frame sending loop
-      const sendFrame = async () => {
-        if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          try {
-            // Draw video to offscreen canvas
-            offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
-            
-            // Fast brightness analysis
-            const imgData = offscreenCtx.getImageData(0, 0, 320, 240);
-            const data = imgData.data;
-            let sum = 0;
-            let count = 0;
-            const step = 8; // sample every 8th pixel
-            for (let i = 0; i < data.length; i += 4 * step) {
-              const r = data[i];
-              const g = data[i+1];
-              const b = data[i+2];
-              const luma = (r * 299 + g * 587 + b * 114) / 1000;
-              sum += luma;
-              count++;
-            }
-            const avgBrightness = sum / count;
-
-            // Apply dynamic visual booster filter based on ambient light
-            let brightness = 1.0;
-            let contrast = 1.0;
-            
-            if (avgBrightness < 55) {
-              // Dark room
-              brightness = 1.9;
-              contrast = 1.45;
-            } else if (avgBrightness < 95) {
-              // Backlit / Silhouette
-              brightness = 1.55;
-              contrast = 1.3;
-            } else if (avgBrightness > 185) {
-              // Overexposed
-              brightness = 0.85;
-              contrast = 1.1;
-            }
-
-            // Redraw with image filters applied
-            offscreenCtx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(1.25)`;
-            offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
-            offscreenCtx.filter = 'none'; // reset
-
-            // Feed the enhanced offscreen canvas to MediaPipe Hands
-            await hands.send({ image: offscreenCanvas });
-          } catch (e) {
-            console.error("Frame send error:", e);
+    // Frame sending loop
+    const sendFrame = async () => {
+      if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        try {
+          // Draw video to offscreen canvas
+          offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
+          
+          // Fast brightness analysis
+          const imgData = offscreenCtx.getImageData(0, 0, 320, 240);
+          const data = imgData.data;
+          let sum = 0;
+          let count = 0;
+          const step = 8; // sample every 8th pixel
+          for (let i = 0; i < data.length; i += 4 * step) {
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+            const luma = (r * 299 + g * 587 + b * 114) / 1000;
+            sum += luma;
+            count++;
           }
-        }
-        requestAnimationFrame(sendFrame);
-      };
-      sendFrame();
+          const avgBrightness = sum / count;
 
-    } catch (err) {
-      console.error("Camera setup failed:", err);
-      trackingStatus.textContent = "❌ 摄像头启动失败";
-    }
+          // Apply dynamic visual booster filter based on ambient light
+          let brightness = 1.0;
+          let contrast = 1.0;
+          
+          if (avgBrightness < 55) {
+            // Dark room
+            brightness = 1.9;
+            contrast = 1.45;
+          } else if (avgBrightness < 95) {
+            // Backlit / Silhouette
+            brightness = 1.55;
+            contrast = 1.3;
+          } else if (avgBrightness > 185) {
+            // Overexposed
+            brightness = 0.85;
+            contrast = 1.1;
+          }
+
+          // Redraw with image filters applied
+          offscreenCtx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(1.25)`;
+          offscreenCtx.drawImage(videoElement, 0, 0, 320, 240);
+          offscreenCtx.filter = 'none'; // reset
+
+          // Feed the enhanced offscreen canvas to MediaPipe Hands
+          await hands.send({ image: offscreenCanvas });
+        } catch (e) {
+          console.error("Frame send error:", e);
+        }
+      }
+      requestAnimationFrame(sendFrame);
+    };
+    sendFrame();
   }
 
   function onHandResults(results) {
