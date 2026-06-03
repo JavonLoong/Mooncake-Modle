@@ -118,69 +118,82 @@
   }
 
   // Setup Calibration Button Event
-  function initCalibrationButton() {
+  function initCalibrationButtons() {
     const calibBtn = document.getElementById('calibrate-button');
-    if (calibBtn) {
-      calibBtn.addEventListener('click', toggleCalibration);
+    const confirmBtn = document.getElementById('calibration-confirm-button');
+    if (calibBtn && confirmBtn) {
+      calibBtn.addEventListener('click', enterCalibration);
+      confirmBtn.addEventListener('click', exitCalibration);
     } else {
-      // Retry in case DOM isn't fully ready
-      setTimeout(initCalibrationButton, 200);
+      setTimeout(initCalibrationButtons, 200);
     }
   }
-  initCalibrationButton();
+  initCalibrationButtons();
 
-  function toggleCalibration() {
-    const calibBtn = document.getElementById('calibrate-button');
-    if (!calibrationActive) {
-      // Start calibration mode
-      calibrationActive = true;
-      calibMinX = 1.0;
-      calibMaxX = 0.0;
-      calibMinY = 1.0;
-      calibMaxY = 0.0;
-      
-      trackingStatus.textContent = "⚙️ 校准模式已开启：请在空中随意挥手，覆盖您的上下左右舒适边界。";
-      
-      if (calibBtn) {
-        calibBtn.style.background = 'rgba(255, 120, 0, 0.55)';
-        calibBtn.style.borderColor = '#ff7800';
-        calibBtn.textContent = "💾 确认校准并保存";
-        calibBtn.classList.add('calibrating-pulse');
-      }
+  function enterCalibration() {
+    if (calibrationActive) return;
+    calibrationActive = true;
+    calibMinX = 1.0;
+    calibMaxX = 0.0;
+    calibMinY = 1.0;
+    calibMaxY = 0.0;
+    
+    // Show calibration overlay
+    const overlay = document.getElementById('calibration-overlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    // Move camera preview to overlay container
+    const calibContainer = document.getElementById('calibration-camera-container');
+    if (calibContainer) {
+      calibContainer.appendChild(videoElement);
+      calibContainer.appendChild(handCanvas);
+    }
+
+    trackingStatus.textContent = "⚙️ 校准模式已开启：请在空中随意挥手，覆盖您的上下左右舒适边界。";
+  }
+
+  function exitCalibration() {
+    if (!calibrationActive) return;
+    calibrationActive = false;
+
+    // Hide calibration overlay
+    const overlay = document.getElementById('calibration-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    // Move camera preview back to default camera panel
+    const cameraPanel = document.getElementById('camera-panel');
+    if (cameraPanel) {
+      cameraPanel.insertBefore(videoElement, trackingStatus);
+      cameraPanel.insertBefore(handCanvas, trackingStatus);
+    }
+
+    const w = calibMaxX - calibMinX;
+    const h = calibMaxY - calibMinY;
+
+    if (w > 0.12 && h > 0.12) {
+      // Comfort padding margins (3%)
+      const padX = w * 0.03;
+      const padY = h * 0.03;
+
+      bounds.minX = Math.max(0.01, calibMinX + padX);
+      bounds.maxX = Math.min(0.99, calibMaxX - padX);
+      bounds.minY = Math.max(0.01, calibMinY + padY);
+      bounds.maxY = Math.min(0.99, calibMaxY - padY);
+
+      try {
+        localStorage.setItem('ninja_calib_bounds', JSON.stringify(bounds));
+      } catch (e) {}
+
+      trackingStatus.textContent = "🎉 校准成功！已保存个人专属体感范围。";
     } else {
-      // Finish calibration mode
-      calibrationActive = false;
-      const w = calibMaxX - calibMinX;
-      const h = calibMaxY - calibMinY;
+      trackingStatus.textContent = "❌ 校准未保存：手势挥舞范围不足。";
+    }
 
-      if (calibBtn) {
-        calibBtn.classList.remove('calibrating-pulse');
-      }
-
-      if (w > 0.12 && h > 0.12) {
-        // Comfort padding margins (3%)
-        const padX = w * 0.03;
-        const padY = h * 0.03;
-
-        bounds.minX = Math.max(0.01, calibMinX + padX);
-        bounds.maxX = Math.min(0.99, calibMaxX - padX);
-        bounds.minY = Math.max(0.01, calibMinY + padY);
-        bounds.maxY = Math.min(0.99, calibMaxY - padY);
-
-        try {
-          localStorage.setItem('ninja_calib_bounds', JSON.stringify(bounds));
-        } catch (e) {}
-
-        trackingStatus.textContent = "🎉 校准成功！已保存个人专属体感范围。";
-      } else {
-        trackingStatus.textContent = "❌ 校准未保存：手势挥舞范围不足。";
-      }
-
-      if (calibBtn) {
-        calibBtn.style.background = 'rgba(133, 229, 242, 0.22)';
-        calibBtn.style.borderColor = 'rgba(133, 229, 242, 0.45)';
-        calibBtn.textContent = "⚙️ 重新校准舒适范围";
-      }
+    const calibBtn = document.getElementById('calibrate-button');
+    if (calibBtn) {
+      calibBtn.style.background = 'rgba(133, 229, 242, 0.22)';
+      calibBtn.style.borderColor = 'rgba(133, 229, 242, 0.45)';
+      calibBtn.textContent = "⚙️ 重新校准舒适范围";
     }
   }
 
@@ -383,8 +396,12 @@
         ctx.fill();
       });
 
+      if (!calibrationActive) {
+        trackingStatus.textContent = "🎯 手势锁定成功";
+      }
+
       // Forward inputs to window.game for sub-step 500Hz interpolation
-      if (window.game) {
+      if (window.game && !calibrationActive) {
         // Clamp to [0, 1] bounds
         const clampedX = Math.max(0, Math.min(1, mappedX));
         const clampedY = Math.max(0, Math.min(1, mappedY));

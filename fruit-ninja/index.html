@@ -210,6 +210,24 @@
       <button id="exit-button" class="mode-button" style="margin-top: 15px; width: 100%; text-align: center; min-height: auto; padding: 10px;">返回主菜单</button>
     </div>
   </div>
+  <!-- Dedicated Calibration Overlay -->
+  <div id="calibration-overlay" style="display: none; position: absolute; inset: 0; z-index: 110; background: rgba(3, 6, 8, 0.88); backdrop-filter: blur(12px); align-items: center; justify-content: center; flex-direction: column; color: #fff;">
+    <div style="text-align: center; max-width: 500px; padding: 28px; background: rgba(12, 22, 28, 0.88); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; box-shadow: 0 30px 90px rgba(0,0,0,0.65); display: flex; flex-direction: column; align-items: center;">
+      <h2 style="color: #ffaa36; margin: 0 0 12px; font-size: 22px;">⚙️ 个人手势舒适区校准</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #b4c6d0; margin: 0 0 20px;">
+        请在摄像头前伸出单手食指，在您的<strong>上下左右舒适极限范围</strong>内随意挥舞移动。<br>
+        （校准期间手势将断开游戏控制，以免误点游戏菜单）
+      </p>
+      
+      <!-- Big camera placeholder during calibration -->
+      <div id="calibration-camera-container" style="position: relative; width: 320px; height: 240px; margin: 0 auto 20px; border: 2px solid rgba(255, 255, 255, 0.22); border-radius: 8px; overflow: hidden; background: #000; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+      </div>
+      
+      <button id="calibration-confirm-button" style="padding: 12px 36px; font-size: 16px; font-weight: bold; color: #fff; background: linear-gradient(135deg, #ff9000, #ff5000); border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 15px rgba(255, 80, 0, 0.45); transition: all 0.2s ease;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+        💾 确认校准并保存
+      </button>
+    </div>
+  </div>
 
   <!-- Game Scripts -->
   <script type="text/javascript" src="./src/ThreePreloader.js?v=1.0.6"></script>
