@@ -87,8 +87,67 @@
   // Tracking state variables
   let smoothedX = null;
   let smoothedY = null;
-  const alpha = 0.68; // Smoothing factor (higher = faster response, lower = smoother)
+  const alpha = 0.68; // Smoothing factor
   let inputActive = false;
+
+  // Comfort Zone boundaries (defaults)
+  let bounds = {
+    minX: 0.18,
+    maxX: 0.82,
+    minY: 0.15,
+    maxY: 0.85
+  };
+
+  // Calibration state variables
+  let calibrationActive = false;
+  let calibrationStartTime = 0;
+  let calibMinX = 1.0;
+  let calibMaxX = 0.0;
+  let calibMinY = 1.0;
+  let calibMaxY = 0.0;
+
+  // Load custom bounds if they exist in localStorage
+  try {
+    const savedBounds = localStorage.getItem('ninja_calib_bounds');
+    if (savedBounds) {
+      bounds = JSON.parse(savedBounds);
+      console.log("Loaded custom hand bounds from localStorage:", bounds);
+    }
+  } catch (e) {
+    console.warn("Could not read localStorage bounds:", e);
+  }
+
+  // Setup Calibration Button Event
+  function initCalibrationButton() {
+    const calibBtn = document.getElementById('calibrate-button');
+    if (calibBtn) {
+      calibBtn.addEventListener('click', startCalibration);
+    } else {
+      // Retry in case DOM isn't fully ready
+      setTimeout(initCalibrationButton, 200);
+    }
+  }
+  initCalibrationButton();
+
+  function startCalibration() {
+    if (calibrationActive) return;
+    calibrationActive = true;
+    calibrationStartTime = Date.now();
+    calibMinX = 1.0;
+    calibMaxX = 0.0;
+    calibMinY = 1.0;
+    calibMaxY = 0.0;
+    
+    trackingStatus.textContent = "⏱️ 校准开始：请随意在空中挥手，触碰您的舒适边界！";
+
+    const calibBtn = document.getElementById('calibrate-button');
+    if (calibBtn) {
+      calibBtn.disabled = true;
+      calibBtn.style.background = 'rgba(255, 172, 54, 0.35)';
+      calibBtn.style.borderColor = 'rgba(255, 172, 54, 0.7)';
+      calibBtn.textContent = "⏱️ 校准中，挥动手指 6s...";
+    }
+  }
 
   // 3. Request webcam immediately to bypass CDN loading latency
   trackingStatus.textContent = "正在启动摄像头...";
@@ -223,15 +282,67 @@
         smoothedY = smoothedY + alpha * (rawY - smoothedY);
       }
 
-      // Draw Comfort Zone (Active Play Area) Box
+      // If Calibration is Active, record ranges
+      if (calibrationActive) {
+        const elapsed = (Date.now() - calibrationStartTime) / 1000;
+        if (elapsed < 6.0) {
+          calibMinX = Math.min(calibMinX, smoothedX);
+          calibMaxX = Math.max(calibMaxX, smoothedX);
+          calibMinY = Math.min(calibMinY, smoothedY);
+          calibMaxY = Math.max(calibMaxY, smoothedY);
+
+          // Draw the dynamically expanding calibration box in orange
+          ctx.strokeStyle = 'rgba(255, 172, 54, 0.75)';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([6, 3]);
+          ctx.strokeRect(
+            calibMinX * handCanvas.width,
+            calibMinY * handCanvas.height,
+            (calibMaxX - calibMinX) * handCanvas.width,
+            (calibMaxY - calibMinY) * handCanvas.height
+          );
+          ctx.setLineDash([]);
+          trackingStatus.textContent = "校准中：剩余 " + Math.ceil(6 - elapsed) + " 秒...";
+        } else {
+          // Calibration complete
+          calibrationActive = false;
+          const w = calibMaxX - calibMinX;
+          const h = calibMaxY - calibMinY;
+
+          if (w > 0.15 && h > 0.15) {
+            // Apply slight margin padding for comfortable gameplay edge reaches
+            bounds.minX = Math.max(0.02, calibMinX + w * 0.05);
+            bounds.maxX = Math.min(0.98, calibMaxX - w * 0.05);
+            bounds.minY = Math.max(0.02, calibMinY + h * 0.05);
+            bounds.maxY = Math.min(0.98, calibMaxY - h * 0.05);
+
+            try {
+              localStorage.setItem('ninja_calib_bounds', JSON.stringify(bounds));
+            } catch(e) {}
+            trackingStatus.textContent = "🎯 校准成功！已保存个人范围。";
+          } else {
+            trackingStatus.textContent = "❌ 校准失败，挥手幅度太小！";
+          }
+
+          const calibBtn = document.getElementById('calibrate-button');
+          if (calibBtn) {
+            calibBtn.disabled = false;
+            calibBtn.style.background = 'rgba(133, 229, 242, 0.22)';
+            calibBtn.style.borderColor = 'rgba(133, 229, 242, 0.45)';
+            calibBtn.textContent = "⚙️ 重新校准舒适范围 (6秒)";
+          }
+        }
+      }
+
+      // Draw active Comfort Zone Box (Cyan dashed)
       ctx.strokeStyle = 'rgba(133, 229, 242, 0.45)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(
-        0.18 * handCanvas.width,
-        0.15 * handCanvas.height,
-        0.64 * handCanvas.width,
-        0.70 * handCanvas.height
+        bounds.minX * handCanvas.width,
+        bounds.minY * handCanvas.height,
+        (bounds.maxX - bounds.minX) * handCanvas.width,
+        (bounds.maxY - bounds.minY) * handCanvas.height
       );
       ctx.setLineDash([]); // reset
 
@@ -255,13 +366,18 @@
         ctx.fill();
       });
 
-      trackingStatus.textContent = "🎯 手势锁定成功";
+      if (!calibrationActive) {
+        trackingStatus.textContent = "🎯 手势锁定成功";
+      }
 
       // Forward inputs to window.game for sub-step 500Hz interpolation
       if (window.game) {
-        // Map camera coordinates with custom comfort zone [0.18, 0.82] to full game window width
-        const mappedX = (smoothedX - 0.18) / 0.64;
-        const mappedY = (smoothedY - 0.15) / 0.70;
+        // Map camera coordinates with dynamically calibrated bounds to full game window
+        const rangeX = bounds.maxX - bounds.minX;
+        const rangeY = bounds.maxY - bounds.minY;
+
+        const mappedX = (smoothedX - bounds.minX) / (rangeX || 1);
+        const mappedY = (smoothedY - bounds.minY) / (rangeY || 1);
         
         // Clamp to [0, 1] bounds
         const clampedX = Math.max(0, Math.min(1, mappedX));
